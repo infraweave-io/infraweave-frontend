@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationDir": "dist",
+    "jsx": "react",
+    "module": "commonjs",
+    "target": "es2019",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["src/standalone", "src/dev", "src/**/*.test.ts", "src/**/*.test.tsx"]
+}

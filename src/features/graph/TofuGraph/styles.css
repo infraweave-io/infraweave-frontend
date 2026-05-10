@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+/* Ensure edges do not capture mouse events to allow panning */
+.react-flow__edge {
+  pointer-events: none !important;
+}
+
+.react-flow__edge path {
+  pointer-events: none !important;
+}
+
+/* Allow interaction with specific UI elements if needed, but keeping edges generally strictly passive */
+.react-flow__edge.selected {
+  pointer-events: none !important;
+}

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # ── General file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # ── Secret scanning ─────────────────────────────────────────────────────────
+  # Requires: brew install gitleaks
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets (gitleaks)
+        language: system
+        entry: gitleaks protect --staged --config .gitleaks.toml
+        pass_filenames: false
+
+  # ── Code formatting (Prettier) ───────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [ts, tsx, css, json, yaml, markdown]
+        additional_dependencies:
+          - prettier@3.1.0
+
+  # ── Linting (ESLint) ─────────────────────────────────────────────────────────
+  # Runs eslint directly on staged TS/TSX files to avoid backstage-cli hanging
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        language: system
+        entry: node_modules/.bin/eslint
+        args: [--max-warnings, '0']
+        types_or: [ts, tsx]
+        pass_filenames: true

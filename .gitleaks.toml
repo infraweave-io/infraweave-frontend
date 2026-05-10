@@ -1,0 +1,25 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks?tab=readme-ov-file#configuration
+
+title = "InfraWeave Backstage Plugin - Gitleaks config"
+
+[extend]
+# Extend the default ruleset
+useDefault = true
+
+[allowlist]
+description = "Allowlist for test fixtures, mocks, and example values"
+paths = [
+  # MSW mock handlers contain example/stub values
+  '''src/mocks/''',
+  # Snapshot/build outputs
+  '''build/''',
+  '''dist/''',
+]
+# Regex patterns for known-safe test tokens in source files
+regexes = [
+  # Placeholder AWS account IDs used in tests / docs
+  '''123456789012''',
+  # Local/example Cognito pool IDs that are not real credentials
+  '''us-east-1_example''',
+]
