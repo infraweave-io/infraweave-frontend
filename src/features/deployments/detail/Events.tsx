@@ -1169,7 +1169,7 @@ export const RecentEvents = (
   const [rcLoading, setRcLoading] = useState(true);
   const [rcError, setRcError] = useState<Error | undefined>(undefined);
 
-  // Initial load: fetch records and enrich with resource_changes
+  // Initial load: fetch recent mutation change records and overlay deployment status by job_id
   useEffect(() => {
     if (!deployment?.project_id) return;
     let cancelled = false;
@@ -1181,25 +1181,61 @@ export const RecentEvents = (
     const load = async () => {
       setRcLoading(true);
       try {
-        const url = `api/proxy/api/infraweave/api/v1/mutations/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=5`;
-        const response = await config.fetch(config.getApiUrl(url));
-        if (response.status >= 300 && response.status < 400)
+        const crUrl = `api/proxy/api/infraweave/api/v1/change_records/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=5&change_type=mutate`;
+        const mutationUrl = `api/proxy/api/infraweave/api/v1/mutations/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=5`;
+        const [crResponse, mutationResponse] = await Promise.all([
+          config.fetch(config.getApiUrl(crUrl)),
+          config.fetch(config.getApiUrl(mutationUrl)).catch(() => null),
+        ]);
+        if (crResponse.status >= 300 && crResponse.status < 400)
           throw new Error('Redirected to login or guest page');
-        const items: Deployment[] = await response.json();
-        const records: ChangeRecord[] = items.map(
-          (d): ChangeRecord => ({
-            timestamp: d.epoch ? new Date(d.epoch).toISOString() : '',
-            job_id: d.job_id,
-            deployment_id: d.deployment_id,
-            change_type: d.change_type ?? 'apply',
-            module_version: d.module_version,
-            epoch: d.epoch,
-            variables: d.variables,
-            error_text: d.error_text,
-            status: d.status,
-          }),
-        );
-        // Eagerly enrich each record with resource_changes
+
+        let mutationItems: Deployment[] = [];
+        const mutationByJobId = new Map<string, Deployment>();
+        if (mutationResponse?.ok) {
+          try {
+            mutationItems = await mutationResponse.json();
+            mutationItems.forEach((d) => {
+              if (d.job_id) mutationByJobId.set(d.job_id, d);
+            });
+          } catch {
+            /* best-effort */
+          }
+        }
+
+        let records: ChangeRecord[];
+        if (crResponse.ok) {
+          const crItems: ChangeRecord[] = await crResponse.json();
+          records = crItems.map((cr): ChangeRecord => {
+            const mutation = cr.job_id ? mutationByJobId.get(cr.job_id) : undefined;
+            return {
+              ...cr,
+              timestamp: cr.timestamp || (cr.epoch ? new Date(cr.epoch).toISOString() : ''),
+              change_type: cr.change_type ?? 'apply',
+              status: mutation?.status ?? cr.status,
+              error_text: mutation?.error_text ?? cr.error_text,
+              module_version: mutation?.module_version ?? cr.module_version,
+              variables: mutation?.variables ?? cr.variables,
+              resource_changes: cr.resource_changes ?? [],
+            };
+          });
+        } else {
+          if (!mutationResponse?.ok) throw new Error('Failed to fetch recent mutations');
+          records = mutationItems.map(
+            (d): ChangeRecord => ({
+              timestamp: d.epoch ? new Date(d.epoch).toISOString() : '',
+              job_id: d.job_id,
+              deployment_id: d.deployment_id,
+              change_type: d.change_type ?? 'apply',
+              module_version: d.module_version,
+              epoch: d.epoch,
+              variables: d.variables,
+              error_text: d.error_text,
+              status: d.status,
+            }),
+          );
+        }
+        // Eagerly backfill details for APIs that omit resource_changes from the list response.
         await Promise.all(
           records.map(async (cr) => {
             if (!cr.job_id) return;
