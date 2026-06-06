@@ -778,6 +778,20 @@ const renderChangeRecordRow = (cr: ChangeRecord, deployment?: Deployment) => {
 };
 
 const PAGE_SIZE = 50;
+const RECENT_MUTATION_COUNT = 5;
+
+const getChangeRecordSortTime = (record: ChangeRecord): number => {
+  if (record.epoch !== undefined) {
+    return record.epoch < 10_000_000_000 ? record.epoch * 1000 : record.epoch;
+  }
+  if (!record.timestamp) return 0;
+
+  const timestamp = new Date(record.timestamp).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const sortChangeRecordsDescending = (records: ChangeRecord[]): ChangeRecord[] =>
+  records.slice().sort((a, b) => getChangeRecordSortTime(b) - getChangeRecordSortTime(a));
 
 const findScrollableAncestor = (el: HTMLElement | null): HTMLElement | null => {
   let parent = el?.parentElement ?? null;
@@ -828,14 +842,7 @@ export const AllChangeRecords = (
       let crUrl = `api/proxy/api/infraweave/api/v1/change_records/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=${PAGE_SIZE}&change_type=${changeType}`;
       if (nextToken) crUrl += `&next_token=${encodeURIComponent(nextToken)}`;
 
-      // mutations/plans provides the status overlay (status, error_text) via job_id
-      const depEndpoint = changeType === 'mutate' ? 'mutations' : 'plans';
-      const depUrl = `api/proxy/api/infraweave/api/v1/${depEndpoint}/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=${PAGE_SIZE}`;
-
-      const [crResp, depResp] = await Promise.all([
-        config.fetch(config.getApiUrl(crUrl)),
-        config.fetch(config.getApiUrl(depUrl)).catch(() => null),
-      ]);
+      const crResp = await config.fetch(config.getApiUrl(crUrl));
 
       if (crResp.status >= 300 && crResp.status < 400) {
         throw new Error('Redirected to login or guest page');
@@ -845,27 +852,9 @@ export const AllChangeRecords = (
       const newNextToken =
         crResp.headers.get('x-next-token') || crResp.headers.get('X-Next-Token') || null;
 
-      // Build job_id → deployment map for status overlay
-      const depMap = new Map<string, Deployment>();
-      if (depResp?.ok) {
-        try {
-          const deps: Deployment[] = await depResp.json();
-          deps.forEach((d) => {
-            if (d.job_id) depMap.set(d.job_id, d);
-          });
-        } catch {
-          // Best-effort — status overlay not critical
-        }
-      }
-
       const items: ChangeRecord[] = crItems.map((cr): ChangeRecord => {
-        const dep = cr.job_id ? depMap.get(cr.job_id) : undefined;
         return {
           ...cr,
-          status: dep?.status ?? cr.status,
-          error_text: dep?.error_text ?? cr.error_text,
-          module_version: dep?.module_version ?? cr.module_version,
-          variables: dep?.variables ?? cr.variables,
           // resource_changes already in the change_record; use [] if absent but CR exists
           resource_changes: cr.resource_changes ?? [],
         };
@@ -902,19 +891,18 @@ export const AllChangeRecords = (
         const types: ('mutate' | 'plan')[] = [];
         if (filterMutate) types.push('mutate');
         if (filterPlan) types.push('plan');
-        const allDeps: Deployment[] = [];
+        const allRecords: ChangeRecord[] = [];
         await Promise.all(
           types.map(async (t) => {
-            const depEndpoint = t === 'mutate' ? 'mutations' : 'plans';
-            const depUrl = `api/proxy/api/infraweave/api/v1/${depEndpoint}/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=${PAGE_SIZE}`;
-            const resp = await config.fetch(config.getApiUrl(depUrl)).catch(() => null);
+            const url = `api/proxy/api/infraweave/api/v1/change_records/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=${PAGE_SIZE}&change_type=${t}`;
+            const resp = await config.fetch(config.getApiUrl(url)).catch(() => null);
             if (resp?.ok) {
-              const deps: Deployment[] = await resp.json();
-              allDeps.push(...deps);
+              const records: ChangeRecord[] = await resp.json();
+              allRecords.push(...records);
             }
           }),
         );
-        const byJobId = new Map(allDeps.filter((d) => d.job_id).map((d) => [d.job_id, d]));
+        const byJobId = new Map(allRecords.filter((cr) => cr.job_id).map((cr) => [cr.job_id, cr]));
         setRecords((prev) =>
           prev.map((cr) => {
             const fresh = cr.job_id ? byJobId.get(cr.job_id) : undefined;
@@ -951,9 +939,7 @@ export const AllChangeRecords = (
         const results = await Promise.all(types.map((t) => fetchPage(t, null)));
         if (cancelled) return;
 
-        const merged = results
-          .flatMap((r) => r.items)
-          .sort((a, b) => (b.epoch ?? 0) - (a.epoch ?? 0));
+        const merged = sortChangeRecordsDescending(results.flatMap((r) => r.items));
         const newTokens: { mutate: string | null; plan: string | null } = {
           mutate: null,
           plan: null,
@@ -998,8 +984,7 @@ export const AllChangeRecords = (
 
       setRecords((prev) => {
         const combined = [...prev, ...results.flatMap((r) => r.items)];
-        combined.sort((a, b) => (b.epoch ?? 0) - (a.epoch ?? 0));
-        return combined;
+        return sortChangeRecordsDescending(combined);
       });
       setTokens((prev) => {
         const next = { ...prev };
@@ -1169,60 +1154,39 @@ export const RecentEvents = (
   const [rcLoading, setRcLoading] = useState(true);
   const [rcError, setRcError] = useState<Error | undefined>(undefined);
 
-  // Initial load: fetch records and enrich with resource_changes
+  const fetchRecentMutations = useCallback(async (): Promise<ChangeRecord[]> => {
+    const project = deployment?.project_id;
+    const region = deployment?.region;
+    const encodedEnvironment = encodeURIComponent(deployment?.environment ?? '');
+    const encodedDeploymentId = encodeURIComponent(deployment?.deployment_id ?? '');
+
+    const url = `api/proxy/api/infraweave/api/v1/change_records/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=${PAGE_SIZE}&change_type=mutate`;
+    const response = await config.fetch(config.getApiUrl(url));
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error('Redirected to login or guest page');
+    }
+
+    const records: ChangeRecord[] = await response.json();
+    return sortChangeRecordsDescending(records).slice(0, RECENT_MUTATION_COUNT);
+  }, [
+    config,
+    deployment?.project_id,
+    deployment?.region,
+    deployment?.environment,
+    deployment?.deployment_id,
+  ]);
+
+  // Initial load: fetch recent mutate change records
   useEffect(() => {
     if (!deployment?.project_id) return;
     let cancelled = false;
-    const project = deployment.project_id;
-    const region = deployment.region;
-    const encodedEnvironment = encodeURIComponent(deployment.environment ?? '');
-    const encodedDeploymentId = encodeURIComponent(deployment.deployment_id ?? '');
 
     const load = async () => {
       setRcLoading(true);
       try {
-        const url = `api/proxy/api/infraweave/api/v1/mutations/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=5`;
-        const response = await config.fetch(config.getApiUrl(url));
-        if (response.status >= 300 && response.status < 400)
-          throw new Error('Redirected to login or guest page');
-        const items: Deployment[] = await response.json();
-        const records: ChangeRecord[] = items.map(
-          (d): ChangeRecord => ({
-            timestamp: d.epoch ? new Date(d.epoch).toISOString() : '',
-            job_id: d.job_id,
-            deployment_id: d.deployment_id,
-            change_type: d.change_type ?? 'apply',
-            module_version: d.module_version,
-            epoch: d.epoch,
-            variables: d.variables,
-            error_text: d.error_text,
-            status: d.status,
-          }),
-        );
-        // Eagerly enrich each record with resource_changes
-        await Promise.all(
-          records.map(async (cr) => {
-            if (!cr.job_id) return;
-            const encodedJobId = encodeURIComponent(cr.job_id);
-            const changeType = (cr.change_type ?? 'apply').toUpperCase();
-            try {
-              const r = await config.fetch(
-                config.getApiUrl(
-                  `api/proxy/api/infraweave/api/v1/change_record/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}/${encodedJobId}/${changeType}`,
-                ),
-              );
-              if (r.ok) {
-                const detail: ChangeRecord = await r.json();
-                cr.resource_changes = detail.resource_changes;
-                cr.plan_std_output = detail.plan_std_output;
-              }
-            } catch {
-              /* best-effort */
-            }
-          }),
-        );
+        const records = await fetchRecentMutations();
         if (!cancelled) {
-          setChangeRecords(records.slice().sort((a, b) => (b.epoch ?? 0) - (a.epoch ?? 0)));
+          setChangeRecords(records);
           setRcError(undefined);
         }
       } catch (e) {
@@ -1235,13 +1199,7 @@ export const RecentEvents = (
     return () => {
       cancelled = true;
     };
-  }, [
-    config,
-    deployment?.project_id,
-    deployment?.region,
-    deployment?.environment,
-    deployment?.deployment_id,
-  ]);
+  }, [deployment?.project_id, fetchRecentMutations]);
 
   // Silently patch statuses when epoch changes — no spinner, no modal disruption
   const recentEpochRef = useRef<number | undefined>(undefined);
@@ -1252,31 +1210,15 @@ export const RecentEvents = (
     recentEpochRef.current = newEpoch;
     if (isMount || !deployment?.project_id) return;
 
-    const project = deployment.project_id;
-    const region = deployment.region;
-    const encodedEnvironment = encodeURIComponent(deployment.environment ?? '');
-    const encodedDeploymentId = encodeURIComponent(deployment.deployment_id ?? '');
-
-    const patchStatuses = async () => {
+    const refreshRecentMutations = async () => {
       try {
-        const url = `api/proxy/api/infraweave/api/v1/mutations/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}?limit=5`;
-        const response = await config.fetch(config.getApiUrl(url));
-        if (!response.ok) return;
-        const items: Deployment[] = await response.json();
-        const byJobId = new Map(items.filter((d) => d.job_id).map((d) => [d.job_id, d]));
-        setChangeRecords((prev) =>
-          prev.map((cr) => {
-            const fresh = cr.job_id ? byJobId.get(cr.job_id) : undefined;
-            if (!fresh) return cr;
-            if (fresh.status === cr.status && fresh.error_text === cr.error_text) return cr;
-            return { ...cr, status: fresh.status, error_text: fresh.error_text };
-          }),
-        );
+        const records = await fetchRecentMutations();
+        setChangeRecords(records);
       } catch {
         /* best-effort */
       }
     };
-    patchStatuses();
+    refreshRecentMutations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployment?.epoch]);
 
