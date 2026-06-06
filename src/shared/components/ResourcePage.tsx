@@ -13,7 +13,7 @@ import {
 } from '../../standalone/components/ComponentAdapter';
 import { Module } from '../../types/Module';
 import { useParams, useNavigate } from 'react-router-dom';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../hooks/useAsync';
 
 export interface ResourcePageProps {
   resourceType: 'module' | 'stack';

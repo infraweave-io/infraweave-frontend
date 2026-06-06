@@ -52,7 +52,6 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.16.0",
     "react-syntax-highlighter": "^15.6.1",
-    "react-use": "^17.2.4",
     "remark-gfm": "^4.0.1",
     "vscode-diff": "^3.0.1"
   },

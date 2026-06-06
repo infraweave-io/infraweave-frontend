@@ -28,7 +28,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ErrorIcon from '@mui/icons-material/Error';
 import Close from '@mui/icons-material/Close';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
 import UpdateIcon from '@mui/icons-material/Update';
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useConfig } from '../../../hooks/useConfig';
 import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
 import { ResourceList } from '../../../shared/components/ResourceList';
 import { ModuleVersions } from '../../modules/detail/ModuleVersions';

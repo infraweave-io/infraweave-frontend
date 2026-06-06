@@ -27,7 +27,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { ZipBrowser } from '../../../shared/components/ZipBrowser';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
 import { ChangesTags } from './VersionDiff';
 import { Deployment } from '../../../types/Deployment';

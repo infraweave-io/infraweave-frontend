@@ -11,7 +11,7 @@ import {
 import { ChangeRecord, ResourceChange } from '../../../types/Log';
 import { Event } from '../../../types/Event';
 import { Deployment } from '../../../types/Deployment';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 
 export const ChangesPlan = (
   props: { event?: Event; deployment?: Deployment } = {

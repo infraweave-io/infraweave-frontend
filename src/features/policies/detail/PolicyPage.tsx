@@ -17,7 +17,7 @@ import {
 } from '../../../standalone/components/ComponentAdapter';
 import { Policy } from '../../../types/Policy';
 import { useParams } from 'react-router-dom';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 import { useNavigate } from 'react-router-dom';
 
 export const PolicyPage = () => {
