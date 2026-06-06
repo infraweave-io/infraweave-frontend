@@ -11,7 +11,7 @@ import {
 } from '../../../standalone/components/ComponentAdapter';
 import { Module } from '../../../types/Module';
 import { Deployment } from '../../../types/Deployment';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 
 export const InputsOutputs = (props: { deployment?: Deployment } = { deployment: undefined }) => {
   const [formatMode, setFormatMode] = React.useState<'yaml' | 'json'>('yaml');

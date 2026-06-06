@@ -1,7 +1,7 @@
 import React from 'react';
 import { useConfig } from '../../../hooks/useConfig';
 import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 import { Provider } from '../../../types/Provider';
 import { Table, TableColumn, Link } from '../../../standalone/components/ComponentAdapter';
 import { Box } from '@mui/material';

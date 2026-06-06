@@ -5,7 +5,7 @@ import { Deployment } from '../../../types/Deployment';
 import { CodeSnippet, Progress } from '../../../standalone/components/ComponentAdapter';
 import { Box } from '@mui/material';
 import { ChangeRecord } from '../../../types/Log';
-import useAsyncFn from 'react-use/lib/useAsyncFn';
+import { useAsyncFn } from '../../../hooks/useAsync';
 
 interface DriftPopoverProps {
   children: React.ReactNode;

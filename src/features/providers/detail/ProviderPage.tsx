@@ -28,7 +28,7 @@ import {
 } from '../../../standalone/components/ComponentAdapter';
 import { useConfig } from '../../../hooks/useConfig';
 import { useIsStandalone } from '../../../contexts/ConfigContext';
-import useAsync from 'react-use/lib/useAsync';
+import { useAsync } from '../../../hooks/useAsync';
 
 const tabs = [{ label: 'Information' }];
 
