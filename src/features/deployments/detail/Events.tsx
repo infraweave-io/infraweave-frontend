@@ -793,6 +793,55 @@ const getChangeRecordSortTime = (record: ChangeRecord): number => {
 const sortChangeRecordsDescending = (records: ChangeRecord[]): ChangeRecord[] =>
   records.slice().sort((a, b) => getChangeRecordSortTime(b) - getChangeRecordSortTime(a));
 
+type EventRecord = Event & {
+  change_type?: string;
+  error_text?: string;
+};
+
+const eventToChangeRecord = (e: EventRecord): ChangeRecord => ({
+  timestamp: e.timestamp,
+  job_id: e.job_id,
+  deployment_id: e.deployment_id,
+  change_type: (e.change_type ?? e.event ?? '').toLowerCase(),
+  module_version: e.module_version,
+  epoch: e.epoch,
+  status: e.status,
+  error_text: e.error_text,
+});
+
+const isMutateChangeType = (changeType?: string) => {
+  const ct = (changeType ?? '').toLowerCase();
+  return ct === 'apply' || ct === 'destroy';
+};
+
+const isPlanChangeType = (changeType?: string) => (changeType ?? '').toLowerCase() === 'plan';
+
+const latestEventPerJob = (events: EventRecord[]): EventRecord[] => {
+  const byJob = new Map<string, EventRecord>();
+  for (const e of events) {
+    if (!e.job_id) continue;
+    const cur = byJob.get(e.job_id);
+    if (!cur || (e.epoch ?? 0) > (cur.epoch ?? 0)) byJob.set(e.job_id, e);
+  }
+  return Array.from(byJob.values());
+};
+
+const buildOrphanEventRecords = (
+  records: ChangeRecord[],
+  events: EventRecord[],
+  filters: { mutate: boolean; plan: boolean },
+): ChangeRecord[] => {
+  const knownJobs = new Set(records.map((r) => r.job_id).filter(Boolean) as string[]);
+  return latestEventPerJob(events)
+    .filter((e) => !knownJobs.has(e.job_id))
+    .map(eventToChangeRecord)
+    .filter((cr) => {
+      if (isMutateChangeType(cr.change_type)) return filters.mutate;
+      if (isPlanChangeType(cr.change_type)) return filters.plan;
+      return filters.mutate || filters.plan;
+    });
+};
+
 const findScrollableAncestor = (el: HTMLElement | null): HTMLElement | null => {
   let parent = el?.parentElement ?? null;
   while (parent) {
@@ -816,6 +865,7 @@ export const AllChangeRecords = (
   const [filterMutate, setFilterMutate] = useState(initialFilterMutate);
   const [filterPlan, setFilterPlan] = useState(initialFilterPlan);
   const [records, setRecords] = useState<ChangeRecord[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [tokens, setTokens] = useState<{ mutate: string | null; plan: string | null }>({
     mutate: null,
     plan: null,
@@ -827,6 +877,24 @@ export const AllChangeRecords = (
 
   const config = useConfig();
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const fetchEvents = useCallback(async (): Promise<EventRecord[]> => {
+    const project = deployment?.project_id;
+    const region = deployment?.region;
+    const encodedEnvironment = encodeURIComponent(deployment?.environment ?? '');
+    const encodedDeploymentId = encodeURIComponent(deployment?.deployment_id ?? '');
+    const url = `api/proxy/api/infraweave/api/v1/events/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}`;
+    const resp = await config.fetch(config.getApiUrl(url)).catch(() => null);
+    if (!resp?.ok) return [];
+    const json = await resp.json().catch(() => null);
+    return Array.isArray(json) ? (json as EventRecord[]) : [];
+  }, [
+    config,
+    deployment?.project_id,
+    deployment?.region,
+    deployment?.environment,
+    deployment?.deployment_id,
+  ]);
 
   const fetchPage = useCallback(
     async (
@@ -911,6 +979,8 @@ export const AllChangeRecords = (
             return { ...cr, status: fresh.status, error_text: fresh.error_text };
           }),
         );
+        const freshEvents = await fetchEvents();
+        setEvents(freshEvents);
       } catch {
         // Best-effort — silent, never disrupt the UI
       }
@@ -926,6 +996,7 @@ export const AllChangeRecords = (
     const load = async () => {
       if (!filterMutate && !filterPlan) {
         setRecords([]);
+        setEvents([]);
         setTokens({ mutate: null, plan: null });
         return;
       }
@@ -936,7 +1007,10 @@ export const AllChangeRecords = (
         if (filterMutate) types.push('mutate');
         if (filterPlan) types.push('plan');
 
-        const results = await Promise.all(types.map((t) => fetchPage(t, null)));
+        const [results, eventList] = await Promise.all([
+          Promise.all(types.map((t) => fetchPage(t, null))),
+          fetchEvents(),
+        ]);
         if (cancelled) return;
 
         const merged = sortChangeRecordsDescending(results.flatMap((r) => r.items));
@@ -948,6 +1022,7 @@ export const AllChangeRecords = (
           newTokens[t] = results[i].nextToken;
         });
         setRecords(merged);
+        setEvents(eventList);
         setTokens(newTokens);
       } catch (e) {
         if (!cancelled) setError(e as Error);
@@ -959,7 +1034,7 @@ export const AllChangeRecords = (
     return () => {
       cancelled = true;
     };
-  }, [filterMutate, filterPlan, fetchPage, reloadKey]);
+  }, [filterMutate, filterPlan, fetchPage, fetchEvents, reloadKey]);
 
   const hasMore = (filterMutate && tokens.mutate !== null) || (filterPlan && tokens.plan !== null);
 
@@ -1043,7 +1118,11 @@ export const AllChangeRecords = (
     { title: '', field: 'logs', width: '30%' },
   ];
 
-  const sortedRecords = records;
+  const orphanEvents = buildOrphanEventRecords(records, events, {
+    mutate: filterMutate,
+    plan: filterPlan,
+  });
+  const sortedRecords = sortChangeRecordsDescending([...records, ...orphanEvents]);
 
   const data: any[] = [];
   sortedRecords.forEach((cr, i) => {
@@ -1151,6 +1230,7 @@ export const RecentEvents = (
 
   const config = useConfig();
   const [changeRecords, setChangeRecords] = useState<ChangeRecord[]>([]);
+  const [recentEvents, setRecentEvents] = useState<EventRecord[]>([]);
   const [rcLoading, setRcLoading] = useState(true);
   const [rcError, setRcError] = useState<Error | undefined>(undefined);
 
@@ -1176,7 +1256,25 @@ export const RecentEvents = (
     deployment?.deployment_id,
   ]);
 
-  // Initial load: fetch recent mutate change records
+  const fetchRecentEvents = useCallback(async (): Promise<EventRecord[]> => {
+    const project = deployment?.project_id;
+    const region = deployment?.region;
+    const encodedEnvironment = encodeURIComponent(deployment?.environment ?? '');
+    const encodedDeploymentId = encodeURIComponent(deployment?.deployment_id ?? '');
+    const url = `api/proxy/api/infraweave/api/v1/events/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}`;
+    const resp = await config.fetch(config.getApiUrl(url)).catch(() => null);
+    if (!resp?.ok) return [];
+    const json = await resp.json().catch(() => null);
+    return Array.isArray(json) ? (json as EventRecord[]) : [];
+  }, [
+    config,
+    deployment?.project_id,
+    deployment?.region,
+    deployment?.environment,
+    deployment?.deployment_id,
+  ]);
+
+  // Initial load: fetch recent mutate change records and events
   useEffect(() => {
     if (!deployment?.project_id) return;
     let cancelled = false;
@@ -1184,9 +1282,10 @@ export const RecentEvents = (
     const load = async () => {
       setRcLoading(true);
       try {
-        const records = await fetchRecentMutations();
+        const [records, events] = await Promise.all([fetchRecentMutations(), fetchRecentEvents()]);
         if (!cancelled) {
           setChangeRecords(records);
+          setRecentEvents(events);
           setRcError(undefined);
         }
       } catch (e) {
@@ -1199,7 +1298,7 @@ export const RecentEvents = (
     return () => {
       cancelled = true;
     };
-  }, [deployment?.project_id, fetchRecentMutations]);
+  }, [deployment?.project_id, fetchRecentMutations, fetchRecentEvents]);
 
   // Silently patch statuses when epoch changes — no spinner, no modal disruption
   const recentEpochRef = useRef<number | undefined>(undefined);
@@ -1210,15 +1309,16 @@ export const RecentEvents = (
     recentEpochRef.current = newEpoch;
     if (isMount || !deployment?.project_id) return;
 
-    const refreshRecentMutations = async () => {
+    const refreshRecent = async () => {
       try {
-        const records = await fetchRecentMutations();
+        const [records, events] = await Promise.all([fetchRecentMutations(), fetchRecentEvents()]);
         setChangeRecords(records);
+        setRecentEvents(events);
       } catch {
         /* best-effort */
       }
     };
-    refreshRecentMutations();
+    refreshRecent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployment?.epoch]);
 
@@ -1233,10 +1333,19 @@ export const RecentEvents = (
     { title: '', field: 'logs', width: '30%' },
   ];
 
+  const recentOrphans = buildOrphanEventRecords(changeRecords, recentEvents, {
+    mutate: true,
+    plan: false,
+  });
+  const recentDisplay = sortChangeRecordsDescending([...changeRecords, ...recentOrphans]).slice(
+    0,
+    RECENT_MUTATION_COUNT,
+  );
+
   const data: any[] = [];
-  changeRecords.forEach((cr, i) => {
+  recentDisplay.forEach((cr, i) => {
     data.push(renderChangeRecordRow(cr, deployment));
-    const next = changeRecords[i + 1];
+    const next = recentDisplay[i + 1];
     if (next) {
       const versionDiffers =
         cr.module_version && next.module_version && cr.module_version !== next.module_version;
