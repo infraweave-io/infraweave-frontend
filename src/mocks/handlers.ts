@@ -228,10 +228,8 @@ export const handlers = [
   ),
 
   // ============= REAPPLY =============
-  ...createHandler(
-    'post',
-    '/api/v1/deployment/reapply/:project/:region/:environment/:deploymentId',
-    () => HttpResponse.json({ job_id: 'mock-job-reapply-1', status: 'requested' }),
+  ...createHandler('post', '/api/v1/reapply', () =>
+    HttpResponse.json({ job_id: 'mock-job-reapply-1', status: 'requested' }),
   ),
 
   // ============= CATCH-ALL HANDLERS (return empty arrays for unmatched endpoints) =============
