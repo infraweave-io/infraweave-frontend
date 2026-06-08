@@ -32,19 +32,26 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
   const config = useConfig();
   const [showDetailedInfo, setShowDetailedInfo] = useState(false);
   const [reapplying, setReapplying] = useState(false);
+  const [reapplyRequested, setReapplyRequested] = useState(false);
   const [reapplyResult, setReapplyResult] = useState<'success' | 'error' | null>(null);
 
   const handleReapply = async () => {
     setReapplying(true);
+    setReapplyRequested(true);
     setReapplyResult(null);
     try {
-      const encodedEnvironment = encodeURIComponent(deployment?.environment ?? '');
-      const encodedDeploymentId = encodeURIComponent(deployment?.deployment_id ?? '');
       const response = await config.fetch(
-        config.getApiUrl(
-          `api/proxy/api/infraweave/api/v1/deployment/reapply/${project}/${region}/${encodedEnvironment}/${encodedDeploymentId}`,
-        ),
-        { method: 'POST' },
+        config.getApiUrl(`api/proxy/api/infraweave/api/v1/reapply`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: project,
+            region,
+            environment: deployment?.environment,
+            deployment_id: deployment?.deployment_id,
+          }),
+        },
       );
       if (!response.ok) throw new Error(`Request failed: ${response.status}`);
       setReapplyResult('success');
@@ -102,7 +109,7 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                   <Button
                     variant="outlined"
                     size="small"
-                    disabled={!!deployment?.deleted || reapplying}
+                    disabled={!!deployment?.deleted || reapplying || reapplyRequested}
                     onClick={handleReapply}
                     startIcon={
                       reapplying ? (
@@ -249,10 +256,13 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
         autoHideDuration={4000}
         onClose={() => setReapplyResult(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ position: 'fixed', zIndex: (theme) => theme.zIndex.snackbar + 1 }}
       >
         <Alert
           severity={reapplyResult === 'success' ? 'success' : 'error'}
           onClose={() => setReapplyResult(null)}
+          variant="filled"
+          sx={{ boxShadow: 3 }}
         >
           {reapplyResult === 'success'
             ? 'Reapply triggered successfully'
