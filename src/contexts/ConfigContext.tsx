@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 import { Env } from '../utils/env';
+import { ensureFreshAuthToken, forceRefreshAuthToken } from '../utils/authToken';
 
 export interface AppConfig {
   backendBaseUrl: string;
@@ -81,23 +82,34 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         // Add auth token to requests in standalone mode
         if (isStandalone) {
-          const token = localStorage.getItem('auth_token');
-          const headers = new Headers(init?.headers);
-          if (token) {
-            headers.set('Authorization', `Bearer ${token}`);
-          }
-          const response = await fetch(input, { ...init, headers });
+          const authDisabled = Env.AUTH_DISABLED;
 
-          // Handle 401 Unauthorized - token expired or invalid
-          // But only if auth is NOT explicitly disabled
-          if (response.status === 401 && !Env.AUTH_DISABLED) {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('user');
-            localStorage.removeItem('selectedRegions');
-            // Redirect to login page
-            window.location.href = '/';
+          const buildRequest = (token: string | null): RequestInit => {
+            const headers = new Headers(init?.headers);
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+            return { ...init, headers };
+          };
+
+          const token = authDisabled
+            ? localStorage.getItem('auth_token')
+            : await ensureFreshAuthToken();
+
+          let response = await fetch(input, buildRequest(token));
+
+          // On 401, try a forced refresh once before clearing the session.
+          if (response.status === 401 && !authDisabled) {
+            const refreshed = await forceRefreshAuthToken();
+            if (refreshed) {
+              response = await fetch(input, buildRequest(refreshed));
+            }
+            if (response.status === 401) {
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('access_token');
+              localStorage.removeItem('refresh_token');
+              localStorage.removeItem('user');
+              localStorage.removeItem('selectedRegions');
+              window.location.href = '/';
+            }
           }
 
           return response;

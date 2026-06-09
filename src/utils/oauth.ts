@@ -258,6 +258,36 @@ export const exchangeCodeForTokens = async (
   return (await response.json()) as TokenResponse;
 };
 
+/**
+ * Exchange a refresh token for a fresh id_token / access_token.
+ * Most providers (Cognito included) do NOT return a new refresh_token here —
+ * callers should keep the existing one if `refresh_token` is absent in the
+ * response.
+ */
+export const refreshTokens = async (
+  provider: OAuthProvider,
+  refreshToken: string,
+): Promise<TokenResponse> => {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: provider.clientId,
+    refresh_token: refreshToken,
+  });
+
+  const response = await fetch(provider.tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Token refresh failed (${response.status}): ${errorText}`);
+  }
+
+  return (await response.json()) as TokenResponse;
+};
+
 // ---------------------------------------------------------------------------
 // User info extraction from ID token
 // ---------------------------------------------------------------------------
@@ -270,7 +300,7 @@ export type UserInfo = {
   providerId: string;
 };
 
-const decodeJwtPayload = (jwt: string): Record<string, unknown> => {
+export const decodeJwtPayload = (jwt: string): Record<string, unknown> => {
   const [, payload] = jwt.split('.');
   if (!payload) throw new Error('Malformed JWT');
   const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
