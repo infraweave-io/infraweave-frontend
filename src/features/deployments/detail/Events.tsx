@@ -51,7 +51,7 @@ const classifyStatus = (status?: string): JobOutcome => {
   if (!status) return 'unknown';
   const s = status.toLowerCase();
   if (s === 'successful') return 'successful';
-  if (s === 'error' || s.startsWith('failed')) return 'failed';
+  if (s.includes('fail') || s.includes('error')) return 'failed';
   if (
     s === 'requested' ||
     s === 'initiated' ||
@@ -826,6 +826,28 @@ const latestEventPerJob = (events: EventRecord[]): EventRecord[] => {
   return Array.from(byJob.values());
 };
 
+const isErrorStatus = (status?: string): boolean => {
+  const s = (status ?? '').toLowerCase();
+  return s.includes('fail') || s.includes('error');
+};
+
+const overlayEventErrors = (records: ChangeRecord[], events: EventRecord[]): ChangeRecord[] => {
+  const errorEvents = new Map<string, EventRecord>();
+  for (const e of latestEventPerJob(events)) {
+    if (e.job_id && isErrorStatus(e.status)) errorEvents.set(e.job_id, e);
+  }
+  return records.map((cr) => {
+    if (!cr.job_id || isErrorStatus(cr.status)) return cr;
+    const errEvent = errorEvents.get(cr.job_id);
+    if (!errEvent) return cr;
+    return {
+      ...cr,
+      status: errEvent.status,
+      error_text: cr.error_text || errEvent.error_text,
+    };
+  });
+};
+
 const buildOrphanEventRecords = (
   records: ChangeRecord[],
   events: EventRecord[],
@@ -1118,11 +1140,12 @@ export const AllChangeRecords = (
     { title: '', field: 'logs', width: '30%' },
   ];
 
-  const orphanEvents = buildOrphanEventRecords(records, events, {
+  const recordsWithEventErrors = overlayEventErrors(records, events);
+  const orphanEvents = buildOrphanEventRecords(recordsWithEventErrors, events, {
     mutate: filterMutate,
     plan: filterPlan,
   });
-  const sortedRecords = sortChangeRecordsDescending([...records, ...orphanEvents]);
+  const sortedRecords = sortChangeRecordsDescending([...recordsWithEventErrors, ...orphanEvents]);
 
   const data: any[] = [];
   sortedRecords.forEach((cr, i) => {
@@ -1333,14 +1356,15 @@ export const RecentEvents = (
     { title: '', field: 'logs', width: '30%' },
   ];
 
-  const recentOrphans = buildOrphanEventRecords(changeRecords, recentEvents, {
+  const changeRecordsWithEventErrors = overlayEventErrors(changeRecords, recentEvents);
+  const recentOrphans = buildOrphanEventRecords(changeRecordsWithEventErrors, recentEvents, {
     mutate: true,
     plan: false,
   });
-  const recentDisplay = sortChangeRecordsDescending([...changeRecords, ...recentOrphans]).slice(
-    0,
-    RECENT_MUTATION_COUNT,
-  );
+  const recentDisplay = sortChangeRecordsDescending([
+    ...changeRecordsWithEventErrors,
+    ...recentOrphans,
+  ]).slice(0, RECENT_MUTATION_COUNT);
 
   const data: any[] = [];
   recentDisplay.forEach((cr, i) => {

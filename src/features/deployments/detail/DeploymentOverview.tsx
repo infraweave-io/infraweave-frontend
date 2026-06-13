@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
-import { Typography, Box, Button, Chip, CircularProgress, Snackbar, Alert } from '@mui/material';
+import {
+  Typography,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
+} from '@mui/material';
 import ReplayIcon from '@mui/icons-material/Replay';
+import ErrorIcon from '@mui/icons-material/Error';
+import Close from '@mui/icons-material/Close';
 import {
   InfoCard,
   Link,
@@ -34,6 +48,10 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
   const [reapplying, setReapplying] = useState(false);
   const [reapplyRequested, setReapplyRequested] = useState(false);
   const [reapplyResult, setReapplyResult] = useState<'success' | 'error' | null>(null);
+  const [errorModalOpen, setErrorModalOpen] = useState(false);
+
+  const statusLower = deployment?.status?.toLowerCase() ?? '';
+  const isFailed = statusLower.includes('fail') || statusLower.includes('error');
 
   const handleReapply = async () => {
     setReapplying(true);
@@ -165,9 +183,38 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                   </Typography>
                 ),
                 Status: (
-                  <Box display="flex" alignItems="center">
-                    <StatusSymbol status={deployment?.status ?? ''} />
-                    <Typography variant="body2">{deployment?.status ?? 'Empty status'}</Typography>
+                  <Box display="flex" alignItems="center" gap={0.5}>
+                    {!isFailed && <StatusSymbol status={deployment?.status ?? ''} />}
+                    {isFailed ? (
+                      <Box
+                        component="button"
+                        onClick={() => setErrorModalOpen(true)}
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          background: 'none',
+                          border: 'none',
+                          p: 0,
+                          cursor: 'pointer',
+                          color: 'error.main',
+                          font: 'inherit',
+                          '&:hover': { opacity: 0.75 },
+                        }}
+                      >
+                        <ErrorIcon sx={{ fontSize: 14 }} />
+                        <Typography
+                          variant="body2"
+                          sx={{ color: 'inherit', textDecoration: 'underline', fontWeight: 500 }}
+                        >
+                          {deployment?.status}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2">
+                        {deployment?.status ?? 'Empty status'}
+                      </Typography>
+                    )}
                   </Box>
                 ),
                 ...(showDetailedInfo && {
@@ -269,6 +316,54 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
             : 'Failed to trigger reapply'}
         </Alert>
       </Snackbar>
+      <Dialog
+        open={errorModalOpen}
+        onClose={() => setErrorModalOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <ErrorIcon sx={{ color: 'error.main' }} />
+              <Typography variant="h6">Job error</Typography>
+            </Box>
+            <IconButton onClick={() => setErrorModalOpen(false)} size="small">
+              <Close />
+            </IconButton>
+          </Box>
+          {deployment?.job_id && (
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+              Job: {deployment.job_id}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent dividers>
+          {deployment?.error_text && deployment.error_text.trim().length > 0 ? (
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                p: 1.5,
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                bgcolor: 'background.default',
+                borderRadius: 1,
+                maxHeight: '60vh',
+                overflow: 'auto',
+              }}
+            >
+              {deployment.error_text}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No error details available for this deployment. Open the logs for full output.
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
