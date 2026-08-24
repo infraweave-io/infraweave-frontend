@@ -34,7 +34,6 @@ export const DenseTable = ({ policies }: DenseTableProps) => {
 
   return (
     <Table
-      title="Policies List"
       options={{
         search: true,
         paging: false,

@@ -30,11 +30,6 @@ export const Stacks = () => {
   }
 
   return (
-    <ResourceList
-      items={value || []}
-      resourceType="stack"
-      title="Stack List"
-      VersionsComponent={ModuleVersions}
-    />
+    <ResourceList items={value || []} resourceType="stack" VersionsComponent={ModuleVersions} />
   );
 };

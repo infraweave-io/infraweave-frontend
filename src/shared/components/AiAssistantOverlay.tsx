@@ -76,18 +76,6 @@ const messageIn = keyframes`
   }
 `;
 
-const softPulse = keyframes`
-  0% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.32);
-  }
-  70% {
-    box-shadow: 0 0 0 16px rgba(99, 102, 241, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
-  }
-`;
-
 const shimmer = keyframes`
   0% {
     background-position: -160px 0;
@@ -467,12 +455,8 @@ export const AiAssistantOverlay: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
             transformOrigin: 'right bottom',
-            transition:
-              'box-shadow 220ms ease, border-color 220ms ease, transform 220ms ease, opacity 220ms ease',
-            boxShadow:
-              theme.palette.mode === 'dark'
-                ? `0 20px 60px ${alpha('#000', 0.48)}`
-                : `0 20px 60px ${alpha('#0f172a', 0.12)}`,
+            transition: 'transform 220ms ease, opacity 220ms ease',
+            boxShadow: theme.shadows[16],
           }}
         >
           <Box
@@ -496,17 +480,12 @@ export const AiAssistantOverlay: React.FC = () => {
                 placeItems: 'center',
                 bgcolor: alpha(theme.palette.primary.main, 0.1),
                 color: 'primary.main',
-                transition: 'transform 180ms ease, background-color 180ms ease',
-                '&:hover': {
-                  transform: 'scale(1.03)',
-                  bgcolor: alpha(theme.palette.primary.main, 0.14),
-                },
               }}
             >
               <AutoAwesomeIcon fontSize="small" />
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.15 }}>
+              <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
                 InfraWeave AI
               </Typography>
               <Typography variant="caption" color="text.secondary">
@@ -523,7 +502,7 @@ export const AiAssistantOverlay: React.FC = () => {
               overflowY: 'auto',
               px: 2.25,
               py: 2,
-              bgcolor: theme.palette.mode === 'dark' ? alpha('#000', 0.12) : '#fbfcfe',
+              bgcolor: 'background.default',
             }}
           >
             <Stack spacing={1.5}>
@@ -1021,23 +1000,19 @@ export const AiAssistantOverlay: React.FC = () => {
       <Tooltip title={open ? 'Close assistant' : 'Ask InfraWeave AI'}>
         <Fab
           color="primary"
+          size="medium"
+          aria-label={open ? 'Close assistant' : 'Ask InfraWeave AI'}
           onClick={() => setOpen((current) => !current)}
           sx={{
             position: 'fixed',
             right: 24,
             bottom: 24,
             zIndex: (zTheme) => zTheme.zIndex.modal + 3,
-            boxShadow: `0 16px 36px ${alpha(theme.palette.primary.main, 0.34)}`,
-            animation: open ? 'none' : `${softPulse} 2.4s ease-out infinite`,
-            transition: 'transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease',
-            transform: open ? 'rotate(90deg) scale(1.02)' : 'rotate(0deg) scale(1)',
-            '&:hover': {
-              transform: open
-                ? 'rotate(90deg) translateY(-2px) scale(1.06)'
-                : 'translateY(-2px) scale(1.04)',
-              boxShadow: `0 20px 44px ${alpha(theme.palette.primary.main, 0.42)}`,
-              animation: 'none',
-            },
+            // No pulse, no lift, no spin: a control that animates at rest reads
+            // as an advertisement for itself.
+            boxShadow: theme.shadows[6],
+            transition: 'background-color 140ms ease',
+            '&:hover': { boxShadow: theme.shadows[8] },
           }}
         >
           <Box
@@ -1046,22 +1021,13 @@ export const AiAssistantOverlay: React.FC = () => {
               placeItems: 'center',
               '& svg': {
                 gridArea: '1 / 1',
-                transition: 'opacity 160ms ease, transform 200ms ease',
+                fontSize: '1.25rem',
+                transition: 'opacity 140ms ease',
               },
             }}
           >
-            <AutoAwesomeIcon
-              sx={{
-                opacity: open ? 0 : 1,
-                transform: open ? 'scale(0.6) rotate(-45deg)' : 'scale(1) rotate(0deg)',
-              }}
-            />
-            <CloseIcon
-              sx={{
-                opacity: open ? 1 : 0,
-                transform: open ? 'scale(1) rotate(-90deg)' : 'scale(0.6) rotate(-45deg)',
-              }}
-            />
+            <AutoAwesomeIcon sx={{ opacity: open ? 0 : 1 }} />
+            <CloseIcon sx={{ opacity: open ? 1 : 0 }} />
           </Box>
         </Fab>
       </Tooltip>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useConfig } from '../../../hooks/useConfig';
-import { Typography, Box, Chip, FormControlLabel, Checkbox } from '@mui/material';
+import { Typography, Box, Chip, FormControlLabel, Checkbox, alpha } from '@mui/material';
+import { MONO_FONT } from '../../../contexts/ThemeContext';
 import {
   Progress,
   ResponseErrorPanel,
@@ -205,19 +206,40 @@ const ResourceChangeDetails = ({ change }: { change: ResourceChange }) => {
       <Typography variant="subtitle2" gutterBottom>
         Attribute Changes:
       </Typography>
-      <table
-        style={{
+      {/* Rendered as a plain table for fixed layout control, but styled through
+          the theme so the diff reads correctly in dark mode too. */}
+      <Box
+        component="table"
+        sx={{
           width: '100%',
           tableLayout: 'fixed',
           borderCollapse: 'collapse',
-          fontSize: '0.875rem',
+          fontSize: '0.8125rem',
+          '& th': {
+            padding: '8px',
+            textAlign: 'left',
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'text.secondary',
+          },
+          '& thead tr': { borderBottom: '1px solid', borderColor: 'divider' },
+          '& tbody tr': { borderBottom: '1px solid', borderColor: 'divider' },
+          '& td': {
+            padding: '8px',
+            fontFamily: MONO_FONT,
+            overflowWrap: 'break-word',
+            wordBreak: 'break-all',
+            verticalAlign: 'top',
+          },
         }}
       >
         <thead>
-          <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
-            <th style={{ padding: '8px', width: '30%' }}>Attribute</th>
-            <th style={{ padding: '8px', width: '35%' }}>Before</th>
-            <th style={{ padding: '8px', width: '35%' }}>After</th>
+          <tr>
+            <th style={{ width: '30%' }}>Attribute</th>
+            <th style={{ width: '35%' }}>Before</th>
+            <th style={{ width: '35%' }}>After</th>
           </tr>
         </thead>
         <tbody>
@@ -241,25 +263,17 @@ const ResourceChangeDetails = ({ change }: { change: ResourceChange }) => {
             const shouldUseInlineDiff = canDiff && !isJson(beforeStr) && !isJson(afterStr);
 
             return (
-              <tr key={row.key} style={{ borderBottom: '1px solid #eee' }}>
-                <td
-                  style={{
-                    padding: '8px',
-                    fontFamily: 'monospace',
-                    overflowWrap: 'break-word',
-                    wordBreak: 'break-all',
-                  }}
-                >
+              <tr key={row.key}>
+                <Box component="td" sx={{ color: 'text.secondary' }}>
                   {row.key}
-                </td>
-                <td
-                  style={{
-                    padding: '8px',
-                    fontFamily: 'monospace',
-                    overflowWrap: 'break-word',
-                    wordBreak: 'break-all',
-                    backgroundColor: changed ? '#ffebee' : 'transparent',
-                    color: changed ? '#c62828' : 'inherit',
+                </Box>
+                <Box
+                  component="td"
+                  sx={{
+                    bgcolor: changed
+                      ? (theme) => alpha(theme.palette.error.main, 0.09)
+                      : 'transparent',
+                    color: changed ? 'error.main' : 'inherit',
                   }}
                 >
                   {shouldUseInlineDiff ? (
@@ -267,15 +281,14 @@ const ResourceChangeDetails = ({ change }: { change: ResourceChange }) => {
                   ) : (
                     beforeStr
                   )}
-                </td>
-                <td
-                  style={{
-                    padding: '8px',
-                    fontFamily: 'monospace',
-                    overflowWrap: 'break-word',
-                    wordBreak: 'break-all',
-                    backgroundColor: changed ? '#e8f5e9' : 'transparent',
-                    color: changed ? '#2e7d32' : 'inherit',
+                </Box>
+                <Box
+                  component="td"
+                  sx={{
+                    bgcolor: changed
+                      ? (theme) => alpha(theme.palette.success.main, 0.09)
+                      : 'transparent',
+                    color: changed ? 'success.main' : 'inherit',
                   }}
                 >
                   {isUnknown ? (
@@ -285,12 +298,12 @@ const ResourceChangeDetails = ({ change }: { change: ResourceChange }) => {
                   ) : (
                     afterStr
                   )}
-                </td>
+                </Box>
               </tr>
             );
           })}
         </tbody>
-      </table>
+      </Box>
     </Box>
   );
 };
@@ -384,16 +397,31 @@ const InlineDiff = ({
         }
         if (mode === 'before' && part.type === 'removed') {
           return (
-            <span key={i} style={{ backgroundColor: '#ffcdd2', textDecoration: 'line-through' }}>
+            <Box
+              key={i}
+              component="span"
+              sx={{
+                bgcolor: (theme) => alpha(theme.palette.error.main, 0.22),
+                textDecoration: 'line-through',
+                borderRadius: '2px',
+              }}
+            >
               {part.value}
-            </span>
+            </Box>
           );
         }
         if (mode === 'after' && part.type === 'added') {
           return (
-            <span key={i} style={{ backgroundColor: '#c8e6c9' }}>
+            <Box
+              key={i}
+              component="span"
+              sx={{
+                bgcolor: (theme) => alpha(theme.palette.success.main, 0.22),
+                borderRadius: '2px',
+              }}
+            >
               {part.value}
-            </span>
+            </Box>
           );
         }
         return null;

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useConfig } from '../../../hooks/useConfig';
-import { Box, Paper, Typography, FormControlLabel, Checkbox } from '@mui/material';
+import { Box, FormControlLabel, Checkbox, CircularProgress } from '@mui/material';
 
 import React from 'react';
-import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
+import { ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
+import { FilterGroup } from '../../../shared/components/FilterGroup';
 import { Project } from '../../../types/Deployment';
 import { useSelectedProjects } from './SelectedProjectsContext';
 
@@ -53,52 +54,52 @@ const EnvFilterPanel = () => {
   };
 
   if (loading) {
-    return <Progress />;
+    // Sized to sit inside the filter panel rather than taking over the column.
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+        <CircularProgress size={20} />
+      </Box>
+    );
   } else if (error) {
     return <ResponseErrorPanel error={error} />;
   }
 
   return (
     <>
-      <Paper elevation={1}>
-        <Box p={2}>
-          <Typography variant="h6">Projects:</Typography>
-          {projects.map((project) => (
-            <FormControlLabel
-              key={project.project_id}
-              control={
-                <Checkbox
-                  checked={isProjectSelected(project.name)}
-                  onChange={() => toggleProjectSelection(project.name)}
-                  name={project.name}
-                  color="primary"
-                />
-              }
-              label={project.name}
-            />
-          ))}
-        </Box>
-      </Paper>
-      <Box mt={2} />
-      <Paper elevation={1}>
-        <Box p={2}>
-          <Typography variant="h6">Regions:</Typography>
-          {availableRegions.map((region) => (
-            <FormControlLabel
-              key={region}
-              control={
-                <Checkbox
-                  checked={selectedRegions.includes(region)}
-                  onChange={() => toggleRegionSelection(region)}
-                  name={region}
-                  color="primary"
-                />
-              }
-              label={region}
-            />
-          ))}
-        </Box>
-      </Paper>
+      <FilterGroup label="Projects">
+        {projects.map((project) => (
+          <FormControlLabel
+            key={project.project_id}
+            control={
+              <Checkbox
+                size="small"
+                checked={isProjectSelected(project.name)}
+                onChange={() => toggleProjectSelection(project.name)}
+                name={project.name}
+                color="primary"
+              />
+            }
+            label={project.name}
+          />
+        ))}
+      </FilterGroup>
+      <FilterGroup label="Regions">
+        {availableRegions.map((region) => (
+          <FormControlLabel
+            key={region}
+            control={
+              <Checkbox
+                size="small"
+                checked={selectedRegions.includes(region)}
+                onChange={() => toggleRegionSelection(region)}
+                name={region}
+                color="primary"
+              />
+            }
+            label={region}
+          />
+        ))}
+      </FilterGroup>
     </>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useIsStandalone } from '../../../contexts/ConfigContext';
-import { Typography, Grid, Box, Link } from '@mui/material';
+import { Typography, Grid, Box } from '@mui/material';
 import {
   InfoCard,
   Header,
@@ -10,6 +10,8 @@ import {
   HeaderLabel,
   HeaderTabs,
 } from '../../../standalone/components/ComponentAdapter';
+import { PageHeading } from '../../../shared/components/PageHeading';
+import { FilterPanel } from '../../../shared/components/FilterGroup';
 import { Deployments } from '../../deployments';
 import { Modules } from '../../modules';
 import { Overview } from '../../overview';
@@ -49,33 +51,18 @@ const TabLayout: React.FC<TabLayoutProps> = ({
   children,
   showEnvFilter = false,
 }) => (
-  <Grid container spacing={3}>
-    <Grid size={3}>
-      <CloudFilterPanel />
-      {showEnvFilter && (
-        <>
-          <Box p={1} />
-          <EnvFilterPanel />
-        </>
-      )}
-    </Grid>
-    <Grid size={9}>
-      <Grid container spacing={3} direction="column">
-        <Grid>
-          <InfoCard title={title}>
-            <Typography variant="body1">{description}</Typography>
-            {detail && (
-              <>
-                <p />
-                <Typography variant="body2">{detail}</Typography>
-              </>
-            )}
-          </InfoCard>
-        </Grid>
-        <Grid>{children}</Grid>
+  <Box>
+    <PageHeading title={title} description={description} detail={detail} />
+    <Grid container spacing={2.5}>
+      <Grid size={{ xs: 12, md: 3, lg: 2.5 }}>
+        <FilterPanel>
+          <CloudFilterPanel />
+          {showEnvFilter && <EnvFilterPanel />}
+        </FilterPanel>
       </Grid>
+      <Grid size={{ xs: 12, md: 9, lg: 9.5 }}>{children}</Grid>
     </Grid>
-  </Grid>
+  </Box>
 );
 
 export const RootPage = () => {
@@ -106,13 +93,10 @@ export const RootPage = () => {
       case 'overview':
         return (
           <>
-            <InfoCard title="Overview">
-              <Typography variant="h6">About the tool</Typography>
-              <Typography paragraph>
-                Read more <Link href="https://preview.infraweave.io/">here</Link> about InfraWeave
-              </Typography>
-            </InfoCard>
-            <Box mt={2} />
+            <PageHeading
+              title="Overview"
+              description="Infrastructure managed through InfraWeave across every connected cloud account."
+            />
             <Overview />
           </>
         );
@@ -181,7 +165,9 @@ export const RootPage = () => {
       default:
         return (
           <InfoCard title="Nothing here">
-            <Typography variant="body1">Select a tab to view content.</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Select a tab to view content.
+            </Typography>
           </InfoCard>
         );
     }
@@ -205,14 +191,7 @@ export const RootPage = () => {
             <HeaderLabel label="Owner" value="Team X" />
             <HeaderLabel label="Lifecycle" value="Alpha" />
           </Header>
-          <Content>
-            <Grid container spacing={3}>
-              <Grid size={12}>
-                {/* Render content based on the selected tab */}
-                {renderTabContent()}
-              </Grid>
-            </Grid>
-          </Content>
+          <Content>{renderTabContent()}</Content>
         </Page>
       </SelectedProjectsProvider>
     </SelectedProvidersProvider>

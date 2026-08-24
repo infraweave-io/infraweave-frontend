@@ -59,7 +59,8 @@ import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import yaml from 'react-syntax-highlighter/dist/esm/languages/hljs/yaml';
 import json from 'react-syntax-highlighter/dist/esm/languages/hljs/json';
 import markdown from 'react-syntax-highlighter/dist/esm/languages/hljs/markdown';
-import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { githubGist, atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { MONO_FONT } from '../../contexts/ThemeContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeMode } from '../../contexts/ThemeContext';
@@ -114,25 +115,32 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, children }) => 
   return (
     <Box
       sx={{
-        padding: 2,
-        paddingBottom: 1,
+        pb: 2,
+        mb: 2,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
+        gap: 2,
+        flexWrap: 'wrap',
         width: '100%',
       }}
     >
-      <Box>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="h3" component="h1">
           {title}
         </Typography>
         {subtitle && (
-          <Typography variant="subtitle1" color="text.secondary">
+          // Kept as a real heading element under the h1: it carries the
+          // resource's type and version, which is the context a screen-reader
+          // user needs when landing on a detail page.
+          <Typography variant="body2" component="h2" color="text.secondary" sx={{ mt: 0.5 }}>
             {subtitle}
           </Typography>
         )}
       </Box>
-      <Box>{children}</Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>{children}</Box>
     </Box>
   );
 };
@@ -191,22 +199,7 @@ export const HeaderTabs: React.FC<HeaderTabsProps> = ({ selectedIndex, onChange,
         variant="scrollable"
         scrollButtons="auto"
         sx={{
-          '& .MuiTab-root': {
-            minHeight: 48,
-            textTransform: 'none',
-            fontWeight: 500,
-            fontSize: '0.9375rem',
-            '&:hover': {
-              color: 'primary.main',
-              backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            },
-          },
-          '& .Mui-selected': {
-            fontWeight: 600,
-          },
-          '& .MuiTabs-indicator': {
-            height: 3,
-          },
+          '& .MuiTab-root:hover': { color: 'text.primary' },
         }}
       >
         {tabs.map((tab) => (
@@ -225,9 +218,12 @@ export const Content: React.FC<ContentProps> = ({ children }) => {
   return (
     <Container
       maxWidth="xl"
+      disableGutters
       sx={{
         flexGrow: 1,
-        padding: 3,
+        // The <main> element already supplies the page gutter; adding a second
+        // one here is what pushed every list a third of the way down the page.
+        px: 0,
       }}
     >
       {children}
@@ -333,44 +329,70 @@ export const StandaloneAppBar: React.FC<StandaloneAppBarProps> = ({ title }) => 
           alignItems: 'center',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
           {showBackButton && (
-            <IconButton edge="start" color="inherit" onClick={handleBack} aria-label="back">
-              <ArrowBackIcon />
+            <IconButton
+              edge="start"
+              size="small"
+              onClick={handleBack}
+              aria-label="back"
+              sx={{ color: 'text.secondary' }}
+            >
+              <ArrowBackIcon fontSize="small" />
             </IconButton>
           )}
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="h6" noWrap sx={{ fontWeight: 600 }}>
-              {title}
-            </Typography>
-            {subtitle && (
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+          <Typography
+            variant="subtitle2"
+            noWrap
+            sx={{ fontWeight: 600, letterSpacing: '-0.01em', fontSize: '0.875rem' }}
+          >
+            {title}
+          </Typography>
+          {subtitle && (
+            <>
+              <Box
+                sx={{
+                  width: '1px',
+                  height: 16,
+                  bgcolor: 'divider',
+                  display: { xs: 'none', sm: 'block' },
+                }}
+              />
+              <Typography
+                variant="body2"
+                noWrap
+                color="text.secondary"
+                sx={{ display: { xs: 'none', sm: 'block' }, minWidth: 0 }}
+              >
                 {subtitle}
               </Typography>
-            )}
-          </Box>
+            </>
+          )}
         </Box>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           <MuiLink
             href="https://preview.infraweave.io"
             target="_blank"
             rel="noopener noreferrer"
-            color="inherit"
+            color="text.secondary"
             underline="hover"
-            sx={{
-              opacity: 0.9,
-              '&:hover': {
-                opacity: 1,
-              },
-            }}
+            variant="body2"
+            sx={{ mr: 1, fontWeight: 400, '&:hover': { color: 'text.primary' } }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 500 }}>
-              infraweave.io
-            </Typography>
+            infraweave.io
           </MuiLink>
 
-          <IconButton onClick={toggleTheme} color="inherit" sx={{ ml: 1 }} title="Toggle theme">
-            {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+          <IconButton
+            onClick={toggleTheme}
+            size="small"
+            sx={{ color: 'text.secondary' }}
+            title="Toggle theme"
+          >
+            {mode === 'dark' ? (
+              <Brightness7Icon fontSize="small" />
+            ) : (
+              <Brightness4Icon fontSize="small" />
+            )}
           </IconButton>
 
           {authState.user && (
@@ -378,18 +400,18 @@ export const StandaloneAppBar: React.FC<StandaloneAppBarProps> = ({ title }) => 
               <IconButton
                 onClick={handleMenuOpen}
                 size="small"
-                sx={{ color: 'inherit' }}
+                sx={{ color: 'text.secondary' }}
                 aria-label="user menu"
               >
                 <Avatar
                   sx={{
-                    width: 32,
-                    height: 32,
-                    bgcolor: 'rgba(255, 255, 255, 0.15)',
-                    color: '#ffffff',
+                    width: 26,
+                    height: 26,
+                    bgcolor: 'action.hover',
+                    color: 'text.secondary',
                   }}
                 >
-                  <AccountCircleIcon />
+                  <AccountCircleIcon fontSize="small" />
                 </Avatar>
               </IconButton>
 
@@ -463,42 +485,15 @@ export const InfoCard: React.FC<InfoCardProps> = ({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-        boxShadow: 'none',
-        transition: 'border-color 0.2s ease',
-        '&:hover': {
-          borderColor: 'primary.light',
-        },
       }}
     >
       {(title || subheader || actions) && (
-        <CardHeader
-          title={title}
-          subheader={subheader}
-          action={actions}
-          sx={{
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            px: 3,
-            py: 2,
-            '& .MuiCardHeader-title': {
-              fontWeight: 600,
-              fontSize: '1rem',
-              color: 'text.primary',
-            },
-            '& .MuiCardHeader-subheader': {
-              fontSize: '0.875rem',
-              color: 'text.secondary',
-            },
-          }}
-        />
+        <CardHeader title={title} subheader={subheader} action={actions} />
       )}
-      <CardContent sx={{ flexGrow: 1, p: 3 }}>{children}</CardContent>
+      <CardContent sx={{ flexGrow: 1 }}>{children}</CardContent>
       {deepLink && (
-        <Box sx={{ p: 2, pt: 0 }}>
-          <MuiLink component={RouterLink} to={deepLink.link}>
+        <Box sx={{ px: 2, pb: 2 }}>
+          <MuiLink component={RouterLink} to={deepLink.link} variant="body2">
             {deepLink.title}
           </MuiLink>
         </Box>
@@ -614,30 +609,35 @@ export const CodeSnippet: React.FC<CodeSnippetProps> = ({
     <Box
       sx={{
         position: 'relative',
-        fontSize: '0.875rem',
         borderRadius: 2,
         overflow: 'hidden',
         border: '1px solid',
         borderColor: 'divider',
         '& pre': {
           margin: 0,
-          padding: '16px !important',
-          backgroundColor: mode === 'light' ? '#f8f9fa !important' : '#1e1e1e !important',
+          padding: '14px 16px !important',
+          fontSize: '0.8125rem !important',
+          lineHeight: 1.6,
+          fontFamily: `${MONO_FONT} !important`,
+          backgroundColor: mode === 'light' ? '#f8f9fa !important' : '#1a1d23 !important',
         },
+        '& code': { fontFamily: `${MONO_FONT} !important` },
       }}
     >
       {showCopyCodeButton && (
         <IconButton
           onClick={handleCopy}
+          aria-label={copied ? 'Copied' : 'Copy to clipboard'}
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 8,
+            top: 6,
+            right: 6,
             padding: '4px',
+            color: 'text.secondary',
             backgroundColor: 'background.paper',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-            },
+            border: '1px solid',
+            borderColor: 'divider',
+            '&:hover': { backgroundColor: 'action.hover' },
             zIndex: 1,
           }}
           size="small"
@@ -645,7 +645,12 @@ export const CodeSnippet: React.FC<CodeSnippetProps> = ({
           {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
         </IconButton>
       )}
-      <SyntaxHighlighter language={language} style={docco} showLineNumbers={showLineNumbers}>
+      <SyntaxHighlighter
+        language={language}
+        // docco rendered dark-on-dark once the surrounding block went dark.
+        style={mode === 'light' ? githubGist : atomOneDark}
+        showLineNumbers={showLineNumbers}
+      >
         {text}
       </SyntaxHighlighter>
     </Box>
@@ -695,7 +700,14 @@ export const StructuredMetadataTable: React.FC<StructuredMetadataTableProps> = (
     // Check if it's a plain object (not a React element)
     if (typeof value === 'object') {
       try {
-        return JSON.stringify(value, null, 2);
+        return (
+          <Box
+            component="pre"
+            sx={{ m: 0, fontFamily: MONO_FONT, fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}
+          >
+            {JSON.stringify(value, null, 2)}
+          </Box>
+        );
       } catch (_err) {
         // Handle circular references or other stringify errors
         return '[Complex Object]';
@@ -710,30 +722,20 @@ export const StructuredMetadataTable: React.FC<StructuredMetadataTableProps> = (
       <MuiTable size={dense ? 'small' : 'medium'}>
         <TableBody>
           {Object.entries(metadata).map(([key, value]) => (
-            <TableRow
-              key={key}
-              sx={{
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                },
-                '&:last-child td': {
-                  borderBottom: 0,
-                },
-              }}
-            >
+            <TableRow key={key}>
               <TableCell
                 component="th"
                 scope="row"
                 sx={{
-                  fontWeight: 600,
-                  width: '30%',
+                  fontWeight: 500,
+                  width: 200,
+                  verticalAlign: 'top',
                   color: 'text.secondary',
-                  fontSize: '0.875rem',
                 }}
               >
                 {key}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.875rem' }}>{formatValue(value)}</TableCell>
+              <TableCell>{formatValue(value)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -753,40 +755,48 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
   return (
     <Box
       sx={{
+        fontSize: '0.875rem',
+        // Prose gets a bounded measure -- full-width paragraphs across a wide
+        // console are unreadable.
+        '& p, & ul, & ol, & blockquote': { maxWidth: '76ch' },
+
         // Basic element styling
         '& h1': {
-          fontSize: '2rem',
+          fontSize: '1.5rem',
           fontWeight: 600,
+          letterSpacing: '-0.018em',
           mt: 3,
-          mb: 2,
+          mb: 1.5,
           borderBottom: '1px solid',
           borderColor: 'divider',
-          pb: 0.5,
+          pb: 0.75,
         },
         '& h2': {
-          fontSize: '1.75rem',
+          fontSize: '1.25rem',
           fontWeight: 600,
+          letterSpacing: '-0.014em',
           mt: 3,
-          mb: 2,
+          mb: 1.5,
           borderBottom: '1px solid',
           borderColor: 'divider',
-          pb: 0.5,
+          pb: 0.75,
         },
-        '& h3': { fontSize: '1.5rem', fontWeight: 600, mt: 2.5, mb: 1.5 },
-        '& h4': { fontSize: '1.25rem', fontWeight: 600, mt: 2, mb: 1 },
-        '& h5': { fontSize: '1rem', fontWeight: 600, mt: 2, mb: 1 },
+        '& h3': { fontSize: '1.0625rem', fontWeight: 600, mt: 2.5, mb: 1 },
+        '& h4': { fontSize: '0.9375rem', fontWeight: 600, mt: 2, mb: 1 },
+        '& h5': { fontSize: '0.875rem', fontWeight: 600, mt: 2, mb: 0.75 },
         '& h6': {
-          fontSize: '0.875rem',
+          fontSize: '0.75rem',
           fontWeight: 600,
           mt: 2,
-          mb: 1,
+          mb: 0.75,
           textTransform: 'uppercase',
+          letterSpacing: '0.06em',
           color: 'text.secondary',
         },
 
         // Text and lists
-        '& p': { mb: 2, lineHeight: 1.6 },
-        '& ul, & ol': { pl: 4, mb: 2 },
+        '& p': { mb: 1.5, lineHeight: 1.65 },
+        '& ul, & ol': { pl: 3, mb: 1.5 },
         '& ul': { listStyleType: 'disc' },
         '& ol': { listStyleType: 'decimal' },
         '& li': { mb: 0.5 },
@@ -811,16 +821,20 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
 
         // Code blocks
         '& code': {
-          fontFamily: 'monospace',
-          fontSize: '0.875em',
+          fontFamily: MONO_FONT,
+          fontSize: '0.8125em',
           bgcolor: 'action.hover',
-          p: 0.5,
-          borderRadius: 1,
+          px: 0.625,
+          py: 0.25,
+          borderRadius: 0.75,
         },
         '& pre': {
-          bgcolor: mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-          p: 2,
-          borderRadius: 1,
+          bgcolor: mode === 'dark' ? '#1a1d23' : '#f8f9fa',
+          fontFamily: MONO_FONT,
+          fontSize: '0.8125rem',
+          lineHeight: 1.6,
+          p: 1.75,
+          borderRadius: 1.5,
           overflowX: 'auto',
           my: 2,
           border: '1px solid',
@@ -828,6 +842,7 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
           '& code': {
             bgcolor: 'transparent',
             p: 0,
+            fontSize: 'inherit',
           },
         },
 
@@ -906,27 +921,33 @@ export function Table<T = any>({ columns, data, title, emptyContent, detailPanel
   };
 
   if (data.length === 0 && emptyContent) {
-    return <Box sx={{ p: 2 }}>{emptyContent}</Box>;
+    return (
+      <Paper
+        variant="outlined"
+        sx={{ p: 4, textAlign: 'center', color: 'text.secondary', fontSize: '0.8125rem' }}
+      >
+        {emptyContent}
+      </Paper>
+    );
   }
 
   return (
-    <TableContainer component={Paper}>
+    <TableContainer
+      component={Paper}
+      variant="outlined"
+      sx={{ borderRadius: 2, overflowX: 'auto' }}
+    >
       {title && (
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-          {typeof title === 'string' ? <Typography variant="h6">{title}</Typography> : title}
+        <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+          {typeof title === 'string' ? <Typography variant="h5">{title}</Typography> : title}
         </Box>
       )}
       <MuiTable stickyHeader>
         <TableHead>
           <TableRow>
-            {detailPanel && (
-              <TableCell sx={{ width: 50, backgroundColor: 'background.paper', zIndex: 2 }} />
-            )}
+            {detailPanel && <TableCell sx={{ width: 44, zIndex: 2 }} />}
             {columns.map((column, index) => (
-              <TableCell
-                key={index}
-                sx={{ fontWeight: 'bold', backgroundColor: 'background.paper', zIndex: 2 }}
-              >
+              <TableCell key={index} sx={{ zIndex: 2, width: column.width }}>
                 {column.title}
               </TableCell>
             ))}
@@ -1038,19 +1059,19 @@ export const CopyTextButton: React.FC<CopyTextButtonProps> = ({ text }) => {
 
 // Status components using standard MUI icons and colors
 export const StatusOK: React.FC = () => (
-  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem' }} />
+  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.0625rem' }} />
 );
 
 export const StatusWarning: React.FC = () => (
-  <WarningIcon sx={{ color: 'warning.main', fontSize: '1.25rem' }} />
+  <WarningIcon sx={{ color: 'warning.main', fontSize: '1.0625rem' }} />
 );
 
 export const StatusError: React.FC = () => (
-  <ErrorIcon sx={{ color: 'error.main', fontSize: '1.25rem' }} />
+  <ErrorIcon sx={{ color: 'error.main', fontSize: '1.0625rem' }} />
 );
 
 export const StatusPending: React.FC = () => (
-  <PendingIcon sx={{ color: 'warning.main', fontSize: '1.25rem' }} />
+  <PendingIcon sx={{ color: 'warning.main', fontSize: '1.0625rem' }} />
 );
 
 export const StatusRunning: React.FC = () => (
@@ -1068,7 +1089,7 @@ export const StatusRunning: React.FC = () => (
 );
 
 export const StatusAborted: React.FC = () => (
-  <CancelIcon sx={{ color: 'text.disabled', fontSize: '1.25rem' }} />
+  <CancelIcon sx={{ color: 'text.disabled', fontSize: '1.0625rem' }} />
 );
 
 // SimpleStepper and SimpleStepperStep - Standalone implementation
@@ -1258,9 +1279,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
               }
             }}
             style={{
-              backgroundColor: isCurrentMatch ? '#ffa500' : '#ffff00',
-              color: '#000',
-              fontWeight: isCurrentMatch ? 'bold' : 'normal',
+              // Muted amber rather than pure yellow: legible against the log
+              // surface without the highlighter-pen look.
+              backgroundColor: isCurrentMatch ? '#f0b429' : 'rgba(240, 180, 41, 0.32)',
+              color: isCurrentMatch ? '#1a1d21' : 'inherit',
+              borderRadius: '2px',
+              fontWeight: isCurrentMatch ? 600 : 'normal',
             }}
           >
             {part}
@@ -1346,15 +1370,21 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
       <Paper
         ref={paperRef}
         onScroll={handleScroll}
+        elevation={0}
         sx={{
           p: 2,
-          backgroundColor: mode === 'light' ? '#1e1e1e' : '#000000',
-          color: '#d4d4d4',
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
+          // Logs stay on a dark surface in both themes -- that is the terminal
+          // convention operators expect -- but a softer graphite than pure black.
+          backgroundColor: mode === 'light' ? '#1a1d23' : '#0b0d10',
+          color: '#c9ced6',
+          fontFamily: MONO_FONT,
+          fontSize: '0.8125rem',
+          lineHeight: 1.6,
+          borderRadius: 2,
           overflow: 'auto',
           flexGrow: 1,
-          border: mode === 'dark' ? '1px solid #333' : 'none',
+          border: '1px solid',
+          borderColor: mode === 'light' ? 'transparent' : 'divider',
         }}
       >
         {!text || text.trim() === '' ? (

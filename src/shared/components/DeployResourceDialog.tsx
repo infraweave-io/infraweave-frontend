@@ -15,6 +15,7 @@ import {
   Box,
   Autocomplete,
 } from '@mui/material';
+import { MONO_FONT } from '../../contexts/ThemeContext';
 import { Module, ModuleExample } from '../../types/Module';
 import EnvFilterPanel from './DeployEnvFilterPanel';
 import { useSelectedProject } from './DeploySelectedContext';
@@ -139,29 +140,41 @@ ${toYamlString(variables, 4)}
   return (
     <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth disableEnforceFocus>
       <DialogTitle>
-        Deploy instance of {module.module} (<span style={{ color: 'navy' }}>{module.version}</span>)
+        Deploy instance of {module.module} (
+        <Box component="span" sx={{ fontFamily: MONO_FONT }}>
+          {module.version}
+        </Box>
+        )
       </DialogTitle>
       <DialogContent>
-        <Typography>
-          Project: <span style={{ color: 'navy' }}>{selectedProjectName}</span>
-        </Typography>
-        <Typography>
-          Repository:{' '}
-          <span style={{ color: 'navy' }}>{selectedRepositoryData?.repository_path}</span>
-        </Typography>
-        <Typography>
-          Region: <span style={{ color: 'navy' }}>{selectedRegion}</span>
-        </Typography>
-        {deployment_id !== '' && (
-          <Typography>
-            Deployment ID: <span style={{ color: 'navy' }}>{deployment_id}</span>
-          </Typography>
-        )}
-        {environment !== '' && (
-          <Typography>
-            Environment: <span style={{ color: 'navy' }}>{environment}</span>
-          </Typography>
-        )}
+        {/* Destination summary as a label/value grid. The values used to be
+            hardcoded navy spans, which are invisible against a dark theme. */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            columnGap: 2,
+            rowGap: 0.5,
+            mb: 2,
+          }}
+        >
+          {[
+            ['Project', selectedProjectName],
+            ['Repository', selectedRepositoryData?.repository_path],
+            ['Region', selectedRegion],
+            ...(deployment_id !== '' ? [['Deployment ID', deployment_id]] : []),
+            ...(environment !== '' ? [['Environment', environment]] : []),
+          ].map(([label, value]) => (
+            <React.Fragment key={label as string}>
+              <Typography variant="body2" color="text.secondary">
+                {label}
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: MONO_FONT }}>
+                {value}
+              </Typography>
+            </React.Fragment>
+          ))}
+        </Box>
         <SimpleStepper {...args}>
           <SimpleStepperStep
             title="Destination"

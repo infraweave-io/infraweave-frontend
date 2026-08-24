@@ -19,7 +19,8 @@ test.describe('Overview page', () => {
 
   test('shows cloud filter panel on overview', async ({ page }) => {
     await page.goto('/infraweave/overview');
-    // Overview tab renders InfoCard with "About the tool" content
-    await expect(page.getByText('About the tool').first()).toBeVisible({ timeout: 10000 });
+    // Overview tab renders the "About InfraWeave" InfoCard (previously titled
+    // "About the tool", inside a full-width card that was mostly empty space)
+    await expect(page.getByText('About InfraWeave').first()).toBeVisible({ timeout: 10000 });
   });
 });

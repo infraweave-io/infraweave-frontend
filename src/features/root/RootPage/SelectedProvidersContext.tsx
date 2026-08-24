@@ -18,14 +18,23 @@ export const SelectedProvidersProvider = ({
   children: ReactNode;
   initialProviders?: string[];
 }) => {
+  // Hardcoded for now. Azure and GCP are kept here, commented out, so they can
+  // be switched back on when those clouds are actually supported.
+  const availableProviders = ['AWS' /* , 'Azure', 'GCP' */];
+
   const [selectedProviders, setSelectedProviders] = useState<string[]>(() => {
     if (initialProviders) return initialProviders;
     // Load from localStorage on initial load
     const savedProviders = localStorage.getItem('selectedProviders');
-    return savedProviders ? JSON.parse(savedProviders) : [];
-  });
+    const saved: string[] = savedProviders ? JSON.parse(savedProviders) : [];
 
-  const availableProviders = ['AWS', 'Azure', 'GCP']; // Hardcoded for now
+    // Drop anything no longer offered. Each selected provider triggers its own
+    // fetch in Projects/Policies, so a leftover 'azure' from a previous session
+    // would duplicate every row -- with no checkbox left to clear it.
+    return saved.filter((provider) =>
+      availableProviders.some((available) => available.toLowerCase() === provider.toLowerCase()),
+    );
+  });
 
   // Update localStorage whenever selectedProviders changes
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tooltip } from '@mui/material';
+import { Box, Tooltip } from '@mui/material';
 
 export const VersionCell = ({ version }: { version: string }) => {
   const [copied, setCopied] = useState(false);
@@ -24,21 +24,29 @@ export const VersionCell = ({ version }: { version: string }) => {
 
   return (
     <Tooltip title={copied ? 'Copied!' : version} arrow placement="top">
-      <span
+      <Box
+        component="span"
         onClick={(e) => {
           e.stopPropagation();
           navigator.clipboard.writeText(version);
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
         }}
-        style={{
+        sx={{
           cursor: 'pointer',
-          textDecoration: 'underline',
-          textDecorationStyle: 'dotted',
+          whiteSpace: 'nowrap',
+          borderRadius: 0.5,
+          // The copy affordance shows on hover. Underlining every version at
+          // rest turned the column into a block of ruled text.
+          '&:hover': {
+            textDecoration: 'underline',
+            textDecorationStyle: 'dotted',
+            textUnderlineOffset: '3px',
+          },
         }}
       >
         {displayVersion}
-      </span>
+      </Box>
     </Tooltip>
   );
 };

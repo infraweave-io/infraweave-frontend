@@ -74,6 +74,7 @@ import { SelectedProvidersProvider } from '../features/root/RootPage/SelectedPro
 import { SelectedProjectsProvider } from '../features/root/RootPage/SelectedProjectsContext';
 
 const drawerWidth = 232;
+const appBarHeight = 56;
 
 const mainNavItems = [
   { label: 'Overview', path: '/infraweave/overview', icon: <HomeIcon /> },
@@ -89,6 +90,11 @@ const analyticsNavItems = [
   { label: 'Observability', path: '/infraweave/observability', icon: <InsightsIcon /> },
 ];
 
+const navSections = [
+  { label: 'Infrastructure', items: mainNavItems },
+  { label: 'Analytics', items: analyticsNavItems },
+];
+
 const NavigationDrawer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,11 +103,11 @@ const NavigationDrawer: React.FC = () => {
   const isSelected = (path: string) => location.pathname.startsWith(path);
 
   const navItemSx = (selected: boolean) => ({
-    borderRadius: 1.5,
-    mx: 0.5,
-    mb: 0.25,
-    minHeight: 38,
-    px: 1.5,
+    borderRadius: 1,
+    mx: 0.75,
+    mb: 0.125,
+    minHeight: 32,
+    px: 1.25,
     '&.Mui-selected': {
       color: theme.palette.primary.main,
       '& .MuiListItemIcon-root': { color: theme.palette.primary.main },
@@ -124,82 +130,41 @@ const NavigationDrawer: React.FC = () => {
       }}
     >
       <Toolbar />
-      <Box sx={{ overflow: 'auto', flex: 1, pt: 1 }}>
-        <Box sx={{ px: 2, pb: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 600,
-              color: 'text.disabled',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              fontSize: '0.7rem',
-            }}
-          >
-            Infrastructure
-          </Typography>
-        </Box>
-        <List disablePadding sx={{ px: 0.5 }}>
-          {mainNavItems.map((item) => (
-            <ListItem key={item.path} disablePadding>
-              <ListItemButton
-                selected={isSelected(item.path)}
-                onClick={() => navigate(item.path)}
-                sx={navItemSx(isSelected(item.path))}
-              >
-                <ListItemIcon sx={{ minWidth: 34 }}>
-                  {React.cloneElement(item.icon, { sx: { fontSize: '1.1rem' } })}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: isSelected(item.path) ? 600 : 400,
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-
-        <Divider sx={{ my: 1.5, mx: 2 }} />
-
-        <Box sx={{ px: 2, pb: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 600,
-              color: 'text.disabled',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              fontSize: '0.7rem',
-            }}
-          >
-            Analytics
-          </Typography>
-        </Box>
-        <List disablePadding sx={{ px: 0.5 }}>
-          {analyticsNavItems.map((item) => (
-            <ListItem key={item.path} disablePadding>
-              <ListItemButton
-                selected={isSelected(item.path)}
-                onClick={() => navigate(item.path)}
-                sx={navItemSx(isSelected(item.path))}
-              >
-                <ListItemIcon sx={{ minWidth: 34 }}>
-                  {React.cloneElement(item.icon, { sx: { fontSize: '1.1rem' } })}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: isSelected(item.path) ? 600 : 400,
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
+      <Box sx={{ overflow: 'auto', flex: 1, pt: 1.5 }}>
+        {navSections.map((section, index) => (
+          <React.Fragment key={section.label}>
+            {index > 0 && <Divider sx={{ my: 1.5, mx: 2 }} />}
+            <Typography
+              variant="overline"
+              component="div"
+              sx={{ px: 2, pb: 0.75, color: 'text.secondary', display: 'block' }}
+            >
+              {section.label}
+            </Typography>
+            <List disablePadding>
+              {section.items.map((item) => (
+                <ListItem key={item.path} disablePadding>
+                  <ListItemButton
+                    selected={isSelected(item.path)}
+                    onClick={() => navigate(item.path)}
+                    sx={navItemSx(isSelected(item.path))}
+                  >
+                    <ListItemIcon sx={{ minWidth: 30 }}>
+                      {React.cloneElement(item.icon, { sx: { fontSize: '1.05rem' } })}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontSize: '0.8125rem',
+                        fontWeight: isSelected(item.path) ? 600 : 450,
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </React.Fragment>
+        ))}
       </Box>
     </Drawer>
   );
@@ -342,11 +307,12 @@ export const StandaloneApp: React.FC<StandaloneAppProps> = ({
                           component="main"
                           sx={{
                             flexGrow: 1,
-                            p: 3,
+                            px: 3,
+                            py: 2.5,
                             width: { md: `calc(100% - ${drawerWidth}px)` },
-                            mt: 8,
+                            mt: `${appBarHeight}px`,
                             overflowY: 'auto',
-                            height: 'calc(100vh - 64px)',
+                            height: `calc(100vh - ${appBarHeight}px)`,
                           }}
                         >
                           <SelectedProvidersProvider>

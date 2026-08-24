@@ -78,7 +78,8 @@ describe('Modules', () => {
     const lastS3bucketDev = [...modules]
       .filter((m) => m.module === 's3bucket' && m.track === 'dev')
       .pop()!;
-    expect(await screen.findByText('Modules List')).toBeInTheDocument();
+    // The "Modules List" caption is gone: the page heading names the list, so
+    // repeating it on the table was a duplicate <h*> on the same view.
     expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
     expect(await screen.findByText(lastS3bucketDev.version)).toBeInTheDocument();
   });

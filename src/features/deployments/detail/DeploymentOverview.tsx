@@ -4,7 +4,6 @@ import {
   Typography,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Snackbar,
   Alert,
@@ -123,6 +122,8 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                 }}
               >
                 <span>Deployment Information</span>
+                {/* One consistent control style: the detail toggle used to be
+                    a Chip, which read as a status badge rather than a button. */}
                 <Box display="flex" gap={1}>
                   <Button
                     variant="outlined"
@@ -136,12 +137,6 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                         <ReplayIcon sx={{ fontSize: 14 }} />
                       )
                     }
-                    sx={{
-                      borderColor: 'grey.500',
-                      color: 'text.primary',
-                      textTransform: 'none',
-                      height: '24px',
-                    }}
                   >
                     {reapplying ? 'Reapplying…' : 'Reapply'}
                   </Button>
@@ -150,21 +145,16 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                     size="small"
                     disabled={!!deployment?.deleted}
                     onClick={handleViewGraph}
-                    sx={{
-                      borderColor: 'grey.500',
-                      color: 'text.primary',
-                      textTransform: 'none',
-                      height: '24px',
-                    }}
                   >
                     Graph
                   </Button>
-                  <Chip
-                    label={showDetailedInfo ? 'Minimal' : 'Detailed'}
+                  <Button
+                    variant="outlined"
                     size="small"
                     onClick={() => setShowDetailedInfo(!showDetailedInfo)}
-                    sx={{ cursor: 'pointer' }}
-                  />
+                  >
+                    {showDetailedInfo ? 'Minimal' : 'Detailed'}
+                  </Button>
                 </Box>
               </Box>
             }

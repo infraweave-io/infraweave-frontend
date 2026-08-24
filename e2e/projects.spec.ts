@@ -36,8 +36,10 @@ test.describe('Projects page', () => {
 
   test('shows cloud filter panel with project names', async ({ page }) => {
     await page.goto('/infraweave/projects');
-    // Projects page has TabLayout which includes the CloudFilterPanel (shows AWS/Azure/GCP)
-    await expect(page.getByText('Cloud:').first()).toBeVisible({ timeout: 10000 });
+    // Projects page has TabLayout which includes the CloudFilterPanel (shows AWS/Azure/GCP).
+    // The group label is "Cloud" — the trailing colon went away when the filter
+    // panels became labelled sections of one panel.
+    await expect(page.getByText('Cloud', { exact: true }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('handles empty projects response', async ({ page }) => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 import Close from '@mui/icons-material/Close';
 import { Drawer, Chip, Grid, Typography, Box, IconButton } from '@mui/material';
+import { MONO_FONT } from '../../../contexts/ThemeContext';
 import { VersionDiff } from '../../../types/Module';
 import { Button, capitalize } from '@mui/material';
 
@@ -48,8 +49,12 @@ export const ChangesTags: React.FC<{ versionDiff: VersionDiff }> = ({ versionDif
       const [prefix, ...rest] = path.split('/').filter(Boolean); // Get the first segment as prefix and rest as the path
       return (
         <Box key={path} component="div" display="flex" alignItems="center" mb={1}>
-          <Typography style={{ color, fontWeight: 'bold', marginRight: 8 }}>{symbol}</Typography>
-          <Typography component="span" style={{ fontWeight: 'bold' }}>
+          {/* sx, not style: the colour is a palette token that has to resolve
+              through the theme so it flips with dark mode. */}
+          <Typography variant="body2" sx={{ color, fontWeight: 700, mr: 1, fontFamily: MONO_FONT }}>
+            {symbol}
+          </Typography>
+          <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>
             {prefix}
           </Typography>
           <Box ml={1} />
@@ -67,13 +72,13 @@ export const ChangesTags: React.FC<{ versionDiff: VersionDiff }> = ({ versionDif
 
       // Collect all additions, changes, removals under this prefix with respective symbols and colors
       if (additions > 0) {
-        added[prefix].forEach((item) => parts.push(formatPath(item.path, '++', 'limegreen')));
+        added[prefix].forEach((item) => parts.push(formatPath(item.path, '++', 'success.main')));
       }
       if (changes > 0) {
-        changed[prefix].forEach((item) => parts.push(formatPath(item.path, '~~', 'blue')));
+        changed[prefix].forEach((item) => parts.push(formatPath(item.path, '~~', 'info.main')));
       }
       if (removals > 0) {
-        removed[prefix].forEach((item) => parts.push(formatPath(item.path, '--', 'red')));
+        removed[prefix].forEach((item) => parts.push(formatPath(item.path, '--', 'error.main')));
       }
 
       if (parts.length > 0) {
@@ -110,11 +115,7 @@ export const ChangesTags: React.FC<{ versionDiff: VersionDiff }> = ({ versionDif
           Object.keys(changed).length > 0 ||
           Object.keys(removed).length > 0) && (
           <Grid>
-            <ReadChangesButton
-              version_diff={versionDiff}
-              label="See Changes"
-              style={{ backgroundColor: 'royalblue', color: 'white' }}
-            />
+            <ReadChangesButton version_diff={versionDiff} label="See changes" />
           </Grid>
         )}
       </Grid>
@@ -126,18 +127,16 @@ export const ChangesTags: React.FC<{ versionDiff: VersionDiff }> = ({ versionDif
 const ReadChangesButton = ({
   version_diff,
   label,
-  style,
 }: {
   version_diff?: VersionDiff;
   label: string;
-  style: object;
 }) => {
   const [isOpen, toggleDrawer] = useState(false);
 
   return (
     <>
       <Grid>
-        <Chip label={label} style={style} onClick={() => toggleDrawer(true)} />
+        <Chip label={label} variant="outlined" onClick={() => toggleDrawer(true)} />
       </Grid>
       <Drawer
         PaperProps={{ sx: { width: '70%', justifyContent: 'space-between', p: 2.5 } }}
@@ -185,89 +184,65 @@ const DrawerContent = ({
         </IconButton>
       </Box>
 
+      {/* The three sections were near-identical copies differing only in colour
+          and field list, each with a hardcoded white card that vanished in dark
+          mode and an unkeyed fragment. One driver table covers all three. */}
       <Box mt={2}>
-        {Object.keys(added).map((prefix) => (
-          <>
-            <Typography key={`${prefix}-added`} variant="h6" style={{ color: 'green' }}>
-              {capitalize(prefix)} Additions
-            </Typography>
-            {added[prefix].map((change, index) => (
-              <Box
-                key={index}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  p: 1,
-                  mb: 1,
-                  bgcolor: '#FFF',
-                  borderRadius: 1,
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                }}
-              >
-                <Typography sx={{ fontWeight: 'bold' }}>Path:</Typography>
-                <Typography>{change.path}</Typography>
-                <Typography sx={{ fontWeight: 'bold' }}>Value:</Typography>
-                <Typography>{change.value}</Typography>
-              </Box>
-            ))}
-          </>
-        ))}
-
-        {Object.keys(changed).map((prefix) => (
-          <>
-            <Typography key={`${prefix}-changed`} variant="h6" style={{ color: 'blue' }}>
-              {capitalize(prefix)} Changes
-            </Typography>
-            {changed[prefix].map((change, index) => (
-              <Box
-                key={index}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  p: 1,
-                  mb: 1,
-                  bgcolor: '#FFF',
-                  borderRadius: 1,
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                }}
-              >
-                <Typography sx={{ fontWeight: 'bold' }}>Path:</Typography>
-                <Typography>{change.path}</Typography>
-                <Typography sx={{ fontWeight: 'bold' }}>Old Value:</Typography>
-                <Typography>{change.old_value}</Typography>
-                <Typography sx={{ fontWeight: 'bold' }}>New Value:</Typography>
-                <Typography>{change.new_value}</Typography>
-              </Box>
-            ))}
-          </>
-        ))}
-
-        {Object.keys(removed).map((prefix) => (
-          <>
-            <Typography key={`${prefix}-removed`} variant="h6" style={{ color: 'red' }}>
-              {capitalize(prefix)} Removals
-            </Typography>
-            {removed[prefix].map((change, index) => (
-              <Box
-                key={index}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  p: 1,
-                  mb: 1,
-                  bgcolor: '#FFF',
-                  borderRadius: 1,
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                }}
-              >
-                <Typography sx={{ fontWeight: 'bold' }}>Path:</Typography>
-                <Typography>{change.path}</Typography>
-                <Typography sx={{ fontWeight: 'bold' }}>Value:</Typography>
-                <Typography>{change.value}</Typography>
-              </Box>
-            ))}
-          </>
-        ))}
+        {(
+          [
+            { id: 'added', noun: 'Additions', groups: added, tone: 'success.main' },
+            { id: 'changed', noun: 'Changes', groups: changed, tone: 'info.main' },
+            { id: 'removed', noun: 'Removals', groups: removed, tone: 'error.main' },
+          ] as const
+        ).map(({ id, noun, groups, tone }) =>
+          Object.keys(groups).map((prefix) => (
+            <Box key={`${prefix}-${id}`} sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ color: tone, mb: 1 }}>
+                {capitalize(prefix)} {noun}
+              </Typography>
+              {groups[prefix].map((change, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    p: 1.25,
+                    mb: 1,
+                    bgcolor: 'background.default',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderLeft: '3px solid',
+                    borderLeftColor: tone,
+                    borderRadius: 1,
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    columnGap: 1.5,
+                    rowGap: 0.25,
+                  }}
+                >
+                  {(
+                    [
+                      ['Path', change.path],
+                      ...(id === 'changed'
+                        ? ([
+                            ['Old value', change.old_value],
+                            ['New value', change.new_value],
+                          ] as [string, string | undefined][])
+                        : ([['Value', change.value]] as [string, string | undefined][])),
+                    ] as [string, string | undefined][]
+                  ).map(([label, value]) => (
+                    <React.Fragment key={label}>
+                      <Typography variant="body2" color="text.secondary">
+                        {label}
+                      </Typography>
+                      <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                        {value}
+                      </Typography>
+                    </React.Fragment>
+                  ))}
+                </Box>
+              ))}
+            </Box>
+          )),
+        )}
       </Box>
 
       <Button variant="contained" onClick={() => toggleDrawer(false)} fullWidth>

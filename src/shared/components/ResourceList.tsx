@@ -12,11 +12,13 @@ import {
   ToggleButtonGroup,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { MONO_FONT } from '../../contexts/ThemeContext';
 
 type ResourceListProps = {
   items: Module[];
   resourceType: 'module' | 'stack';
-  title: string;
+  /** Optional table caption. Omit when the page heading already names the list. */
+  title?: string;
   VersionsComponent: React.ComponentType<{
     module?: string;
     track?: string;
@@ -79,12 +81,40 @@ export const ResourceList = ({
       resource.dev_version ? 'dev' : null,
     ].filter(Boolean) as string[];
 
+    // Versions are machine-generated identifiers, so they get the mono stack;
+    // a dash makes "no version on this track" explicit rather than blank.
+    const versionCell = (track: string, version: string) =>
+      version ? (
+        <Link
+          to={`/infraweave/${resourceType}/${track}/${encodeURIComponent(
+            resource.module,
+          )}/${encodeURIComponent(version)}`}
+          style={{ fontFamily: MONO_FONT }}
+        >
+          {version}
+        </Link>
+      ) : (
+        <Box component="span" sx={{ color: 'text.disabled' }}>
+          &mdash;
+        </Box>
+      );
+
     return {
       module: (
+        // A real <button>: this opens the versions dialog, so it has to be
+        // reachable by keyboard, which the previous clickable <span> was not.
         <Box
-          component="span"
+          component="button"
+          type="button"
           sx={{
+            background: 'none',
+            border: 0,
+            p: 0,
+            font: 'inherit',
+            fontWeight: 600,
+            color: 'text.primary',
             cursor: 'pointer',
+            textAlign: 'left',
             '&:hover': {
               textDecoration: 'underline',
               color: 'primary.main',
@@ -99,53 +129,13 @@ export const ResourceList = ({
             setSelectedTrack(availableTracks[0] || 'stable');
           }}
         >
-          <b>{resource.module_name}</b>
+          {resource.module_name}
         </Box>
       ),
-      stable_version: resource.stable_version ? (
-        <Link
-          to={`/infraweave/${resourceType}/stable/${encodeURIComponent(
-            resource.module,
-          )}/${encodeURIComponent(resource.stable_version)}`}
-        >
-          {resource.stable_version}
-        </Link>
-      ) : (
-        ''
-      ),
-      beta_version: resource.beta_version ? (
-        <Link
-          to={`/infraweave/${resourceType}/beta/${encodeURIComponent(
-            resource.module,
-          )}/${encodeURIComponent(resource.beta_version)}`}
-        >
-          {resource.beta_version}
-        </Link>
-      ) : (
-        ''
-      ),
-      alpha_version: resource.alpha_version ? (
-        <Link
-          to={`/infraweave/${resourceType}/alpha/${encodeURIComponent(
-            resource.module,
-          )}/${encodeURIComponent(resource.alpha_version)}`}
-        >
-          {resource.alpha_version}
-        </Link>
-      ) : (
-        ''
-      ),
-      dev_version: resource.dev_version ? (
-        <Link
-          to={`/infraweave/${resourceType}/dev/${encodeURIComponent(
-            resource.module,
-          )}/${encodeURIComponent(resource.dev_version)}`}
-        >
-          {resource.dev_version}
-        </Link>
-      ) : (
-        ''
-      ),
+      stable_version: versionCell('stable', resource.stable_version),
+      beta_version: versionCell('beta', resource.beta_version),
+      alpha_version: versionCell('alpha', resource.alpha_version),
+      dev_version: versionCell('dev', resource.dev_version),
     };
   });
 
