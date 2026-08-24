@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useConfig } from '../../../hooks/useConfig';
-import { Popover, Typography, Card, CardContent } from '@mui/material';
+import { Popover, Typography, Stack } from '@mui/material';
 import { Deployment } from '../../../types/Deployment';
 import { CodeSnippet, Progress } from '../../../standalone/components/ComponentAdapter';
 import { Box } from '@mui/material';
@@ -67,7 +67,9 @@ const DriftPopover: React.FC<DriftPopoverProps> = ({ children, deployment }) => 
 
   return (
     <div>
-      <div onClick={handlePopoverToggle}>{children}</div>
+      <Box onClick={handlePopoverToggle} sx={{ cursor: 'pointer', display: 'inline-flex' }}>
+        {children}
+      </Box>
 
       {/* Popover content */}
       {open && (
@@ -94,52 +96,43 @@ const DriftPopover: React.FC<DriftPopoverProps> = ({ children, deployment }) => 
           disableScrollLock // Ensure scroll is not locked
           disableRestoreFocus
         >
-          <Card>
-            <CardContent>
-              {loading ? (
-                <Progress />
-              ) : error ? (
-                <Typography variant="body2" color="error">
-                  Error loading data
+          <Box sx={{ p: 2, maxWidth: 720 }}>
+            {loading ? (
+              <Progress />
+            ) : error ? (
+              <Typography variant="body2" color="error">
+                Error loading data
+              </Typography>
+            ) : (
+              <Stack spacing={1.5}>
+                <Box>
+                  <Typography variant="h5" component="h2">
+                    Drift detected
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    This deployment has drifted from its desired specification.
+                  </Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  Checked at {value?.timestamp}
                 </Typography>
-              ) : (
-                <>
-                  <Box mb={2} />
-                  <Typography variant="h6">Drift has been detected:</Typography>
-                  <Box mb={2} />
-                  <Typography variant="body1">
-                    <Box display="flex" alignItems="center">
-                      This deployment has been drifted from the desired specification.
-                    </Box>
+                <Box>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ display: 'block', mb: 0.5 }}
+                  >
+                    Output
                   </Typography>
-                  <Box mb={2} />
-                  <Typography variant="body2">
-                    <Box display="flex" alignItems="center">
-                      This check was exectuted at: <Box mr={1} /> <b>{value?.timestamp}</b>
-                    </Box>
-                  </Typography>
-                  <Box mb={2} />
-                  <Typography variant="h6">
-                    <Box display="flex" alignItems="center">
-                      Output:
-                    </Box>
-                  </Typography>
-                  <Box mb={2} />
-                  <Card>
-                    <CardContent>
-                      <CodeSnippet
-                        language="text"
-                        showCopyCodeButton
-                        customStyle={{ background: 'white', borderRadius: '8px' }}
-                        text={value?.plan_std_output || 'Could not fetch logs'}
-                      />
-                    </CardContent>
-                  </Card>
-                  <Box mb={2} />
-                </>
-              )}
-            </CardContent>
-          </Card>
+                  <CodeSnippet
+                    language="text"
+                    showCopyCodeButton
+                    text={value?.plan_std_output || 'Could not fetch logs'}
+                  />
+                </Box>
+              </Stack>
+            )}
+          </Box>
         </Popover>
       )}
     </div>

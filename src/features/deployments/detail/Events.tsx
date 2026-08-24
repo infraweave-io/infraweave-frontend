@@ -479,7 +479,7 @@ const ChangeSummary = ({
       Icon: EditOutlinedIcon,
     });
   if (summary.replace > 0)
-    parts.push({ label: `${summary.replace} replaced`, color: '#f9a825', Icon: AutorenewIcon });
+    parts.push({ label: `${summary.replace} replaced`, color: 'info.main', Icon: AutorenewIcon });
   if (summary.delete > 0)
     parts.push({
       label: `${summary.delete} destroyed`,

@@ -80,11 +80,6 @@ export const Providers = () => {
   ];
 
   return (
-    <Table
-      title="Providers List"
-      options={{ search: true, paging: true, pageSize: 10 }}
-      columns={columns}
-      data={data}
-    />
+    <Table options={{ search: true, paging: true, pageSize: 10 }} columns={columns} data={data} />
   );
 };

@@ -1,6 +1,7 @@
 import { Deployment } from '../../types/Deployment';
-import { Box, Chip } from '@mui/material';
+import { Box } from '@mui/material';
 import DriftPopover from '../../features/deployments/list/DriftPopOver';
+import { StatusChip } from './StatusChip';
 import React from 'react';
 
 export default function SyncBadge({
@@ -17,39 +18,25 @@ export default function SyncBadge({
   const timeSinceSyncMinutes = Math.floor(timeSinceSync / 60000);
 
   if (disabled) {
-    return (
-      <Chip
-        label={`Disabled (${timeSinceSyncMinutes}m ago)`}
-        style={{ marginLeft: '8px', color: 'white', backgroundColor: 'orange' }}
-      />
-    );
+    return <StatusChip tone="neutral" label={`Disabled (${timeSinceSyncMinutes}m ago)`} />;
   }
 
   if (deployment.status === 'initiated') {
-    return (
-      <Chip
-        label={`Syncing (${timeSinceSyncMinutes}m ago)`}
-        style={{ marginLeft: '8px', color: 'white', backgroundColor: '#2E86C1' }}
-      />
-    );
+    return <StatusChip tone="info" label={`Syncing (${timeSinceSyncMinutes}m ago)`} />;
   }
 
   return (
     (deployment.has_drifted && (
       <Box display="flex" alignItems="center">
         <DriftPopover deployment={deployment}>
-          <Chip
-            label="Has drifted"
-            style={{ marginLeft: '8px', color: 'white', backgroundColor: 'purple' }}
-          />
+          {/* Drift is a deviation to investigate, so it reads as a warning
+              rather than the previous purple, which mapped to nothing. */}
+          <StatusChip tone="warning" label="Has drifted" />
         </DriftPopover>
       </Box>
     )) ||
     (!deployment.has_drifted && (
-      <Chip
-        label={`In sync (${timeSinceSyncMinutes}m ago)`}
-        style={{ marginLeft: '8px', color: 'white', backgroundColor: 'green' }}
-      />
+      <StatusChip tone="success" label={`In sync (${timeSinceSyncMinutes}m ago)`} />
     ))
   );
 }

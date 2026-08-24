@@ -77,8 +77,9 @@ describe('Policies', () => {
         </ConfigProvider>
       </MemoryRouter>,
     );
-    // Use findByText for asynchronous elements
-    expect(await screen.findByText('Policies List')).toBeInTheDocument();
+    // Use findByText for asynchronous elements.
+    // The "Policies List" caption is gone: the page heading names the list, so
+    // repeating it on the table was a duplicate <h*> on the same view.
     expect(await screen.findByText(policies[0].policy)).toBeInTheDocument();
     expect(await screen.findByText(policies[0].version)).toBeInTheDocument();
   });

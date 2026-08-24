@@ -22,7 +22,9 @@ import {
   Paper,
   Autocomplete,
   Tooltip,
+  Chip,
 } from '@mui/material';
+import { MONO_FONT } from '../../../contexts/ThemeContext';
 import Refresh from '@mui/icons-material/Refresh';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -51,43 +53,56 @@ type DenseTableProps = {
 };
 
 // Component must be defined outside DenseTable to avoid re-creation on every render
-const RemovableHeader = ({ title, onRemove }: { title: string; onRemove: () => void }) => {
-  const [hover, setHover] = useState(false);
+const RemovableHeader = ({ title, onRemove }: { title: string; onRemove: () => void }) => (
+  <Box
+    display="flex"
+    alignItems="center"
+    justifyContent="space-between"
+    width="100%"
+    // Reveal on hover via CSS rather than hover state: one less render per
+    // pointer move across a table that can hold hundreds of rows.
+    sx={{ '&:hover .column-hide': { opacity: 1 } }}
+  >
+    <span>{title}</span>
+    <Tooltip title="Hide column">
+      <IconButton
+        className="column-hide"
+        size="small"
+        aria-label={`Hide ${title} column`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        sx={{
+          ml: 1,
+          padding: 0.25,
+          color: 'text.secondary',
+          opacity: 0,
+          transition: 'opacity 120ms ease',
+          '&:focus-visible': { opacity: 1 },
+        }}
+      >
+        <VisibilityOffIcon sx={{ fontSize: 15 }} />
+      </IconButton>
+    </Tooltip>
+  </Box>
+);
 
-  return (
-    <Box
-      display="flex"
-      alignItems="center"
-      justifyContent="space-between"
-      width="100%"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      <span>{title}</span>
-      <Tooltip title="Hide column">
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          sx={{
-            ml: 1,
-            padding: 0.5,
-            opacity: hover ? 0.7 : 0,
-            transition: 'opacity 0.2s',
-            '&:hover': {
-              opacity: 1,
-              color: 'text.secondary',
-            },
-          }}
-        >
-          <VisibilityOffIcon fontSize="small" sx={{ fontSize: 16 }} />
-        </IconButton>
-      </Tooltip>
-    </Box>
-  );
-};
+/** Chip that restores a column the user previously hid. */
+const AddColumnChip = ({ label, onAdd }: { label: string; onAdd: () => void }) => (
+  <Chip
+    label={label}
+    size="small"
+    variant="outlined"
+    onClick={onAdd}
+    icon={<VisibilityIcon sx={{ fontSize: 14 }} />}
+    sx={{
+      borderStyle: 'dashed',
+      color: 'text.secondary',
+      '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
+    }}
+  />
+);
 
 export const DenseTable = ({
   deployments,
@@ -103,6 +118,13 @@ export const DenseTable = ({
   const [showDriftCheck, setShowDriftCheck] = useState(false);
   const [showRegion, setShowRegion] = useState(true);
   const [showPlansModal, setShowPlansModal] = useState(false);
+
+  const hiddenColumns = [
+    { label: 'Timestamp', visible: showTimestamp, show: setShowTimestamp },
+    { label: 'Account', visible: showAccount, show: setShowAccount },
+    { label: 'Region', visible: showRegion, show: setShowRegion },
+    { label: 'Drift check', visible: showDriftCheck, show: setShowDriftCheck },
+  ].filter((column) => !column.visible);
 
   const columns: TableColumn[] = [
     { title: 'Name', field: 'name' },
@@ -181,22 +203,24 @@ export const DenseTable = ({
     return {
       region: deployment.region,
       name: (
-        <>
-          <Link to={deployment_link}>{deployment.deployment_id.split('/').pop()}</Link>
-          <br />
-          <span style={{ color: 'grey', marginTop: '0.5em', display: 'inline-block' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          <Link to={deployment_link} style={{ fontFamily: MONO_FONT }}>
+            {deployment.deployment_id.split('/').pop()}
+          </Link>
+          <Typography variant="caption" color="text.secondary">
             {deployment.module}
-          </span>
-        </>
+          </Typography>
+        </Box>
       ),
       namespace: (
-        <>
-          {deployment?.environment.split('/').slice(1).join('/') || deployment?.environment}
-          <br />
-          <span style={{ color: 'grey', marginTop: '0.5em', display: 'inline-block' }}>
-            {deployment?.environment.split('/')[0]}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          <span>
+            {deployment?.environment.split('/').slice(1).join('/') || deployment?.environment}
           </span>
-        </>
+          <Typography variant="caption" color="text.secondary">
+            {deployment?.environment.split('/')[0]}
+          </Typography>
+        </Box>
       ),
       account:
         projects.find((p) => p.project_id === deployment.project_id)?.name || deployment.project_id,
@@ -238,24 +262,32 @@ export const DenseTable = ({
           </Box>
         );
       })(),
-      timestamp: deployment.epoch ? new Date(deployment.epoch).toLocaleString() : 'N/A',
+      timestamp: (
+        <Typography variant="body2" sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>
+          {deployment.epoch ? new Date(deployment.epoch).toLocaleString() : 'N/A'}
+        </Typography>
+      ),
       // environment: deployment.environment,
       module_version: (
-        <Box display="flex" alignItems="center">
-          <Typography variant="body2">
+        <Box display="flex" alignItems="center" gap={0.5}>
+          <Box component="span" sx={{ fontFamily: MONO_FONT, fontSize: '0.8125rem' }}>
             <VersionCell version={deployment.module_version} />
-          </Typography>
-          <IconButton
-            size="small"
-            onClick={() => {
-              setSelectedDeployment(deployment);
-              setNewVersion('');
-              setOpenDialog(true);
-              dialogOpen(true);
-            }}
-          >
-            <UpdateIcon fontSize="small" />
-          </IconButton>
+          </Box>
+          <Tooltip title="Upgrade version">
+            <IconButton
+              size="small"
+              aria-label="Upgrade version"
+              onClick={() => {
+                setSelectedDeployment(deployment);
+                setNewVersion('');
+                setOpenDialog(true);
+                dialogOpen(true);
+              }}
+              sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+            >
+              <UpdateIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       ),
       has_drifted: (
@@ -275,99 +307,35 @@ export const DenseTable = ({
     <>
       <Table
         title={
-          <div
-            style={{
+          <Box
+            sx={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: 1.5,
+              flexWrap: 'wrap',
             }}
           >
+            <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
+              <Tooltip title="Refresh deployments">
+                <IconButton size="small" onClick={onRefresh} sx={{ color: 'text.secondary' }}>
+                  <Refresh fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {hiddenColumns.length > 0 && (
+                <>
+                  <Box sx={{ width: '1px', height: 18, bgcolor: 'divider', mx: 0.5 }} />
+                  <Typography variant="caption" color="text.secondary">
+                    Add column
+                  </Typography>
+                  {hiddenColumns.map(({ label, show }) => (
+                    <AddColumnChip key={label} label={label} onAdd={() => show(true)} />
+                  ))}
+                </>
+              )}
+            </Box>
+
             <Box display="flex" gap={1} alignItems="center">
-              <IconButton color="primary" onClick={onRefresh} style={{ fontSize: '1.5rem' }}>
-                <Refresh fontSize="small" />
-              </IconButton>
-            </Box>
-
-            <Box display="flex" gap={1} ml={2} alignItems="center">
-              {!showTimestamp && (
-                <Tooltip title="Show Timestamp column">
-                  <IconButton
-                    size="small"
-                    onClick={() => setShowTimestamp(true)}
-                    sx={{
-                      padding: 0.5,
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <VisibilityIcon fontSize="small" sx={{ fontSize: 16 }} />
-                    <Typography variant="caption" sx={{ ml: 0.5 }}>
-                      Timestamp
-                    </Typography>
-                  </IconButton>
-                </Tooltip>
-              )}
-              {!showAccount && (
-                <Tooltip title="Show Account column">
-                  <IconButton
-                    size="small"
-                    onClick={() => setShowAccount(true)}
-                    sx={{
-                      padding: 0.5,
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <VisibilityIcon fontSize="small" sx={{ fontSize: 16 }} />
-                    <Typography variant="caption" sx={{ ml: 0.5 }}>
-                      Account
-                    </Typography>
-                  </IconButton>
-                </Tooltip>
-              )}
-              {!showRegion && (
-                <Tooltip title="Show Region column">
-                  <IconButton
-                    size="small"
-                    onClick={() => setShowRegion(true)}
-                    sx={{
-                      padding: 0.5,
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <VisibilityIcon fontSize="small" sx={{ fontSize: 16 }} />
-                    <Typography variant="caption" sx={{ ml: 0.5 }}>
-                      Region
-                    </Typography>
-                  </IconButton>
-                </Tooltip>
-              )}
-              {!showDriftCheck && (
-                <Tooltip title="Show Drift Check column">
-                  <IconButton
-                    size="small"
-                    onClick={() => setShowDriftCheck(true)}
-                    sx={{
-                      padding: 0.5,
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <VisibilityIcon fontSize="small" sx={{ fontSize: 16 }} />
-                    <Typography variant="caption" sx={{ ml: 0.5 }}>
-                      Drift Check
-                    </Typography>
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
-
-            <Box display="flex" gap={1} ml={2} alignItems="center">
               <Autocomplete
                 multiple
                 limitTags={1}
@@ -381,7 +349,7 @@ export const DenseTable = ({
                 onChange={(_event, newValue) => {
                   setSelectedTags(newValue.map((tag) => tag));
                 }}
-                sx={{ minWidth: 120 }}
+                sx={{ minWidth: 140 }}
               />
               <Tooltip title="View deployment plans & history">
                 <Button
@@ -392,13 +360,12 @@ export const DenseTable = ({
                     setShowPlansModal(true);
                     isModalOpenRef.current = true;
                   }}
-                  sx={{ textTransform: 'none' }}
                 >
                   History
                 </Button>
               </Tooltip>
             </Box>
-          </div>
+          </Box>
         }
         options={{
           search: true,
@@ -426,7 +393,7 @@ export const DenseTable = ({
             </IconButton>
           </Box>
           {errorModalDeployment?.job_id && (
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: MONO_FONT }}>
               Job: {errorModalDeployment.job_id}
             </Typography>
           )}
@@ -438,8 +405,10 @@ export const DenseTable = ({
               sx={{
                 m: 0,
                 p: 1.5,
-                fontFamily: 'monospace',
-                fontSize: '0.85rem',
+                fontFamily: MONO_FONT,
+                fontSize: '0.8125rem',
+                border: '1px solid',
+                borderColor: 'divider',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 bgcolor: 'background.default',
@@ -459,16 +428,30 @@ export const DenseTable = ({
       </Dialog>
       {selectedDeployment && (
         <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth>
-          <DialogTitle>Upgrade Deployment</DialogTitle>
+          <DialogTitle>Upgrade deployment</DialogTitle>
           <DialogContent>
-            <Typography>
-              Deployment ID:{' '}
-              <span style={{ color: 'navy' }}>{selectedDeployment.deployment_id}</span>
-            </Typography>
-            <Typography>
-              Current Version:{' '}
-              <span style={{ color: 'darkGreen' }}>{selectedDeployment.module_version}</span>
-            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                columnGap: 2,
+                rowGap: 0.5,
+                mb: 2,
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Deployment ID
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: MONO_FONT }}>
+                {selectedDeployment.deployment_id}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Current version
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: MONO_FONT }}>
+                {selectedDeployment.module_version}
+              </Typography>
+            </Box>
             <SimpleStepper {...args}>
               <SimpleStepperStep
                 title="Select version"
@@ -514,8 +497,17 @@ export const DenseTable = ({
                 <div>
                   <Typography variant="body1">
                     Upgrade deployment from current version{' '}
-                    <span style={{ color: 'darkGreen' }}>{selectedDeployment.module_version}</span>{' '}
-                    to <span style={{ color: 'purple' }}>{newVersion}</span>?
+                    <Box component="span" sx={{ fontFamily: MONO_FONT, fontWeight: 500 }}>
+                      {selectedDeployment.module_version}
+                    </Box>{' '}
+                    to{' '}
+                    <Box
+                      component="span"
+                      sx={{ fontFamily: MONO_FONT, fontWeight: 600, color: 'primary.main' }}
+                    >
+                      {newVersion}
+                    </Box>
+                    ?
                   </Typography>
                   <br />
                   <Typography>
@@ -634,15 +626,11 @@ export const ModuleVersions = ({
   const options = value?.map((mod) => mod.version) || [];
 
   return (
-    <Paper
-      style={{
-        padding: 10,
-      }}
-    >
+    <Paper variant="outlined" sx={{ p: 1.5, mt: 1 }}>
       <Autocomplete
         value={currentValue}
         options={options}
-        renderInput={(params) => <TextField {...params} label={`${module} version`} />}
+        renderInput={(params) => <TextField {...params} size="small" label={`${module} version`} />}
         onChange={handleVersionChange}
       />
     </Paper>

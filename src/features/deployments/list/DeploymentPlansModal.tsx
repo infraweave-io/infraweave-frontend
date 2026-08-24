@@ -602,11 +602,14 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
                         key={`${deployment.project_id}-${deployment.region}-${deployment.environment}-${deployment.deployment_id}`}
                         hover
                         sx={{
-                          borderLeft: deployment.deleted
-                            ? '4px solid #f44336'
+                          // 3px accent in palette tokens rather than the old
+                          // Material-2014 hexes, which ignored the dark theme.
+                          borderLeft: '3px solid',
+                          borderLeftColor: deployment.deleted
+                            ? 'error.main'
                             : deployment.status === 'requested'
-                              ? '4px solid #2196f3'
-                              : '4px solid #4caf50',
+                              ? 'info.main'
+                              : 'success.main',
                           '&:hover': {
                             backgroundColor: 'action.hover',
                           },

@@ -2,38 +2,32 @@ import React from 'react';
 import { Link, InfoCard } from '../../../standalone/components/ComponentAdapter';
 import { Box, Grid, Typography } from '@mui/material';
 
+/**
+ * Landing content for the Overview tab.
+ *
+ * Cards are sized to their content and laid out on a responsive grid; the
+ * previous full-width card stretched a single link across the viewport.
+ */
 export const Overview = () => (
-  <Grid container>
-    <Grid container>
-      <Grid size={12} />
+  <Grid container spacing={2.5}>
+    <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+      <InfoCard
+        title="Announcements"
+        subheader="Latest news and updates"
+        deepLink={{ link: '/infraweave/announcements', title: 'View all announcements' }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          No announcements right now.
+        </Typography>
+      </InfoCard>
     </Grid>
-    <Grid>
-      <InfoCard title="Announcements" subheader="Latest news and updates">
-        {/* <Card style={{ marginTop: 10 }}>
-          <Box p={1}>
-            <Typography variant="subtitle1">InfraWeave is now available</Typography>
-            <Box mt={1} />
-            <Typography variant="body2">
-              Example: InfraWeave is now available for all users. You can now use InfraWeave to manage your infrastructure.
-            </Typography>
-          </Box>
-        </Card>
-        <Card style={{ marginTop: 10 }}>
-          <Box p={1}>
-            <Typography variant="subtitle1">Upcoming upgrade</Typography>
-            <Box mt={1} />
-            <Typography variant="body2">
-              Example: We will be upgrading InfraWeave to version 0.1.0. The upgrade will take place on 12th December, no downtime is expected.
-              <br />
-              <br />
-              Please ensure that you have saved your work before the upgrade.
-            </Typography>
-          </Box>
-        </Card> */}
-        <Box style={{ marginTop: 20 }}>
-          <Typography variant="body2" style={{ padding: 0 }}>
-            <Link to="/infraweave/announcements">View all announcements</Link>
-          </Typography>
+    <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+      <InfoCard title="About InfraWeave" subheader="Documentation and guides">
+        <Typography variant="body2" color="text.secondary">
+          InfraWeave manages modules, stacks, and deployments across your cloud accounts.
+        </Typography>
+        <Box sx={{ mt: 1.5 }}>
+          <Link href="https://preview.infraweave.io/">Read the documentation</Link>
         </Box>
       </InfoCard>
     </Grid>

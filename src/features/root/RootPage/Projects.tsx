@@ -8,7 +8,7 @@ import {
   MarkdownContent,
 } from '../../../standalone/components/ComponentAdapter';
 import { Project } from '../../../types/Project';
-import { Box, Paper } from '@mui/material';
+import { Box } from '@mui/material';
 import { useSelectedProviders } from './SelectedProvidersContext';
 
 type DenseTableProps = {
@@ -23,20 +23,21 @@ export const DenseTable = ({ projects }: DenseTableProps) => {
 
   const data = projects.map((policy) => {
     return {
-      project: policy.name,
-      description: (
-        <Paper elevation={1}>
-          <Box style={{ padding: 20 }}>
-            <MarkdownContent content={policy.description || '<No description>'} />
-          </Box>
-        </Paper>
+      project: <Box sx={{ fontWeight: 600 }}>{policy.name}</Box>,
+      // A nested raised card inside every table cell fought the table's own
+      // borders; the description is just text in a cell.
+      description: policy.description ? (
+        <MarkdownContent content={policy.description} />
+      ) : (
+        <Box component="span" sx={{ color: 'text.disabled' }}>
+          No description
+        </Box>
       ),
     };
   });
 
   return (
     <Table
-      title="Projects List"
       options={{
         search: true,
         paging: false,

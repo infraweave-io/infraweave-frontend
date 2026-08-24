@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Paper, Typography, FormControlLabel, Checkbox } from '@mui/material';
+import { FormControlLabel, Checkbox } from '@mui/material';
+import { FilterGroup } from '../../../shared/components/FilterGroup';
 import { useSelectedProviders } from './SelectedProvidersContext';
 
 const CloudFilterPanel = () => {
@@ -10,28 +11,26 @@ const CloudFilterPanel = () => {
   };
 
   return (
-    <Paper elevation={1}>
-      <Box p={2}>
-        <Typography variant="h6">Cloud:</Typography>
-        {availableProviders.map((provider) => {
-          const providerName = provider.toLowerCase(); // Normalize provider name to lowercase
-          return (
-            <FormControlLabel
-              key={providerName}
-              control={
-                <Checkbox
-                  checked={selectedProviders.includes(providerName)}
-                  onChange={handleCloudFilterChange}
-                  name={providerName}
-                  color="primary"
-                />
-              }
-              label={provider}
-            />
-          );
-        })}
-      </Box>
-    </Paper>
+    <FilterGroup label="Cloud">
+      {availableProviders.map((provider) => {
+        const providerName = provider.toLowerCase(); // Normalize provider name to lowercase
+        return (
+          <FormControlLabel
+            key={providerName}
+            control={
+              <Checkbox
+                size="small"
+                checked={selectedProviders.includes(providerName)}
+                onChange={handleCloudFilterChange}
+                name={providerName}
+                color="primary"
+              />
+            }
+            label={provider}
+          />
+        );
+      })}
+    </FilterGroup>
   );
 };
 

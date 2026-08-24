@@ -209,25 +209,12 @@ export const PolicySettings = (props: { policy?: Policy } = { policy: undefined 
   return (
     <Box display="flex" flexDirection="column" flexBasis="50%">
       <InfoCard title="Policy Settings">
-        <Box display="flex" flexDirection="column" padding={2}>
+        {/* Each setting was a hardcoded light-grey card that scaled up under the
+            cursor; policy settings are reference data, not a call to action. */}
+        <Box display="flex" flexDirection="column">
           {Object.entries(policy?.data ?? {}).map(([key, value]) => (
-            <Card
-              key={key}
-              style={{
-                padding: '16px',
-                border: '1px solid #e0e0e0',
-                backgroundColor: '#fafafa',
-                borderRadius: '8px',
-                boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)', // Subtle shadow for depth
-                transition: 'transform 0.2s ease-in-out', // Smooth hover effect
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
-              onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              <CardHeader
-                title={key}
-                titleTypographyProps={{ variant: 'h6', style: { fontWeight: 'bold' } }}
-              />
+            <Card key={key} sx={{ mb: 1.5, bgcolor: 'background.default' }}>
+              <CardHeader title={key} />
               <CardContent>
                 <CodeSnippet
                   language="json"

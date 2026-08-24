@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Popover, Typography, Card, CardContent, Box } from '@mui/material';
 import { MarkdownContent } from '../../../standalone/components/ComponentAdapter';
+import { MONO_FONT } from '../../../contexts/ThemeContext';
 import { TfVariable } from '../../../types/Module';
 
 interface ModuleVariablePopoverProps {
@@ -64,7 +65,9 @@ const ModuleVariablePopover: React.FC<ModuleVariablePopoverProps> = ({ children,
               <Box display="flex" alignItems="center">
                 Type:
                 <Box mr={2} />
-                <span style={{ color: 'navy' }}>{variable.type}</span>
+                <Box component="span" sx={{ fontFamily: MONO_FONT, color: 'primary.main' }}>
+                  {variable.type}
+                </Box>
               </Box>
             </Typography>
             <Box mb={2} />

@@ -16,6 +16,18 @@ import { Event } from '../../../types/Event';
 
 const steps = ['Requested', 'Initiated', 'Policy Evaluation', 'Running', 'Finished'];
 
+/**
+ * Palette token for a job type. Replaces the CSS named colours (darkGreen,
+ * darkBlue, darkRed) these used to carry, which never adapted to dark mode.
+ */
+const EVENT_TONE: Record<string, string> = {
+  apply: 'success.main',
+  plan: 'info.main',
+  destroy: 'error.main',
+};
+
+const eventTone = (eventType?: string) => EVENT_TONE[eventType ?? ''] ?? 'warning.main';
+
 export default function HorizontalStepperWithError({ events }: { events: Event[] }) {
   // Helper functions to check if each step has been reached
   // const hasRequest = events.some(event => event.status === 'requested');
@@ -79,16 +91,11 @@ export default function HorizontalStepperWithError({ events }: { events: Event[]
               );
 
               const event = events.find((event) => event.status === 'requested');
-              let color = 'darkOrange';
-              if (event?.event === 'apply') {
-                color = 'darkGreen';
-              } else if (event?.event === 'plan') {
-                color = 'darkBlue';
-              } else if (event?.event === 'destroy') {
-                color = 'darkRed';
-              }
               label2 = (
-                <Typography color={color}>
+                <Typography
+                  variant="body2"
+                  sx={{ color: eventTone(event?.event), fontWeight: 500 }}
+                >
                   {events.find((event) => event.status === 'requested')?.event}
                 </Typography>
               );
@@ -159,29 +166,16 @@ const CustomStepIcon = (props: {
   const { index, eventType, inProgress, finished, completed, failed, inactive, icon } = props;
 
   if (index === 0 && eventType) {
-    let EventIcon = PlayArrowIcon;
-    let color = 'darkOrange';
-
-    if (eventType === 'apply') {
-      color = 'darkGreen';
-      EventIcon = PlayArrowIcon;
-    } else if (eventType === 'plan') {
-      color = 'darkBlue';
-      EventIcon = DescriptionIcon;
-    } else if (eventType === 'destroy') {
-      color = 'darkRed';
-      EventIcon = DeleteIcon;
-    }
+    const EventIcon =
+      eventType === 'plan' ? DescriptionIcon : eventType === 'destroy' ? DeleteIcon : PlayArrowIcon;
 
     // If it's the current/completed step, use color. If inactive, simplify?
     // Usually 'Requested' is always completed or in progress if we have events.
-    // If it's inactive (shouldn't happen for step 0), use grey.
-
-    return inactive ? <EventIcon style={{ color: 'grey' }} /> : <EventIcon style={{ color }} />;
+    return <EventIcon sx={{ color: inactive ? 'text.disabled' : eventTone(eventType) }} />;
   }
 
   if (failed) {
-    return <ErrorOutline style={{ color: 'red' }} />;
+    return <ErrorOutline sx={{ color: 'error.main' }} />;
   }
 
   if (inProgress) {
@@ -193,15 +187,15 @@ const CustomStepIcon = (props: {
   }
 
   if (inactive) {
-    return <CloseIcon style={{ color: 'grey' }} />;
+    return <CloseIcon sx={{ color: 'text.disabled' }} />;
   }
 
   if (completed) {
-    return <CheckIcon style={{ color: 'darkgreen' }} />;
+    return <CheckIcon sx={{ color: 'success.main' }} />;
   }
 
   if (finished) {
-    return <CheckCircleIcon style={{ color: 'green' }} />;
+    return <CheckCircleIcon sx={{ color: 'success.main' }} />;
   }
 
   return <Box>{icon}</Box>;

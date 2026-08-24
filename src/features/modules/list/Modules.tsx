@@ -29,11 +29,6 @@ export const Modules = () => {
   }
 
   return (
-    <ResourceList
-      items={value || []}
-      resourceType="module"
-      title="Modules List"
-      VersionsComponent={ModuleVersions}
-    />
+    <ResourceList items={value || []} resourceType="module" VersionsComponent={ModuleVersions} />
   );
 };

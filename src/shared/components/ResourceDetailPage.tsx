@@ -136,9 +136,10 @@ export const ResourceDetailPage: React.FC<ResourceDetailPageProps> = ({ resource
           Browse Artifact
         </Button>
         {isModule && (
+          // Only "Browse Artifact" stays filled: a row of four solid buttons
+          // gives the user no read on which action is the primary one.
           <Button
-            variant="contained"
-            color="primary"
+            variant="outlined"
             startIcon={<CloudQueueIcon />}
             onClick={() => {
               setDeploymentsVersion(data.version);
@@ -401,7 +402,7 @@ spec:
         headerActions={(data) => (
           <Box display="flex" gap={1}>
             {headerActions(data)}
-            <Button variant="contained" color="primary" onClick={() => setOpenVersionsModal(true)}>
+            <Button variant="outlined" onClick={() => setOpenVersionsModal(true)}>
               Versions
             </Button>
           </Box>

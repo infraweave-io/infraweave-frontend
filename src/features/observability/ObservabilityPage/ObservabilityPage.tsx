@@ -30,10 +30,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  alpha,
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { PageHeading } from '../../../shared/components/PageHeading';
+import { useChartStatusColors } from '../../../contexts/ThemeContext';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { PieChart } from '@mui/x-charts/PieChart';
@@ -508,6 +513,7 @@ const ModuleUsageView = ({
 
 const VelocityView = ({ onBack }: { onBack: () => void }) => {
   const config = useConfig();
+  const chartColors = useChartStatusColors();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{ date: string; success: number; failed: number }[]>([]);
   const [error, setError] = useState<Error | null>(null);
@@ -649,8 +655,8 @@ const VelocityView = ({ onBack }: { onBack: () => void }) => {
               dataset={stats}
               xAxis={[{ scaleType: 'point', dataKey: 'date', label: 'Date' }]}
               series={[
-                { dataKey: 'success', label: 'Successful Deployments', color: '#4caf50' },
-                { dataKey: 'failed', label: 'Failed Deployments', color: '#f44336' },
+                { dataKey: 'success', label: 'Successful Deployments', color: chartColors.success },
+                { dataKey: 'failed', label: 'Failed Deployments', color: chartColors.failed },
               ]}
               height={350}
             />
@@ -663,6 +669,7 @@ const VelocityView = ({ onBack }: { onBack: () => void }) => {
 
 const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
   const config = useConfig();
+  const chartColors = useChartStatusColors();
   const [loading, setLoading] = useState(true);
   const [statusStats, setStatusStats] = useState<
     { id: string; value: number; label: string; color: string }[]
@@ -714,10 +721,10 @@ const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
         });
 
         const statusData = Object.entries(statusCounts).map(([status, count], _index) => {
-          let color = '#9e9e9e'; // default grey
-          if (status === 'successful' || status === 'active') color = '#4caf50'; // green
-          if (status === 'failed' || status === 'error') color = '#f44336'; // red
-          if (status === 'in-progress') color = '#2196f3'; // blue
+          let color: string = chartColors.unknown;
+          if (status === 'successful' || status === 'active') color = chartColors.success;
+          if (status === 'failed' || status === 'error') color = chartColors.failed;
+          if (status === 'in-progress') color = chartColors.inProgress;
 
           return {
             id: status,
@@ -744,7 +751,9 @@ const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
     };
 
     fetchData();
-  }, [config]);
+    // chartColors is a per-mode constant, so this only re-runs on a theme flip,
+    // which is exactly when the baked-in slice colours need recomputing.
+  }, [config, chartColors]);
 
   if (loading) return <Progress />;
   if (error) return <ResponseErrorPanel error={error} />;
@@ -842,6 +851,7 @@ const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
 
 const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
   const config = useConfig();
+  const chartColors = useChartStatusColors();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<
     { module: string; total: number; failed: number; rate: number }[]
@@ -1048,7 +1058,9 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
                   <BarChart
                     dataset={stats.slice(0, 10).filter((s) => s.failed > 0)}
                     xAxis={[{ scaleType: 'band', dataKey: 'module', label: 'Module / Stack' }]}
-                    series={[{ dataKey: 'failed', label: 'Failed Deployments', color: '#f44336' }]}
+                    series={[
+                      { dataKey: 'failed', label: 'Failed Deployments', color: chartColors.failed },
+                    ]}
                     height={350}
                   />
                 </Box>
@@ -1223,6 +1235,58 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
   );
 };
 
+/**
+ * Entry tile for one observability view.
+ *
+ * Left-aligned with a small tinted glyph: the previous 60px centred icons read
+ * as marketing tiles, and two of the three used the same red shield, which
+ * signalled "something is wrong here" on a page where nothing is wrong yet.
+ */
+const DashboardCard = ({
+  icon,
+  tone,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactElement;
+  tone: 'primary' | 'success' | 'warning';
+  title: string;
+  description: string;
+  onClick: () => void;
+}) => (
+  <Card sx={{ height: '100%' }}>
+    <CardActionArea
+      onClick={onClick}
+      sx={{ height: '100%', alignItems: 'flex-start', justifyContent: 'flex-start' }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: 1,
+            display: 'grid',
+            placeItems: 'center',
+            mb: 1.5,
+            color: `${tone}.main`,
+            bgcolor: (theme) => alpha(theme.palette[tone].main, 0.1),
+            '& svg': { fontSize: '1.125rem' },
+          }}
+        >
+          {icon}
+        </Box>
+        <Typography variant="h5" component="h2" gutterBottom>
+          {title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {description}
+        </Typography>
+      </CardContent>
+    </CardActionArea>
+  </Card>
+);
+
 export const ObservabilityPage = () => {
   // In standalone, this component is rendered inside RootPage which is at /infraweave/observability or /infraweave/observability/:view
   // We can use the 'view' param from the router if available.
@@ -1262,43 +1326,23 @@ export const ObservabilityPage = () => {
   }
 
   return (
-    <Grid container spacing={4}>
-      <Grid size={12}>
-        <Typography variant="h4" gutterBottom>
-          Observability Dashboard
-        </Typography>
-        <Typography variant="body1" color="textSecondary" paragraph>
-          Monitor your infrastructure, analyze usage patterns, and detect issues.
-        </Typography>
-      </Grid>
+    <Box>
+      <PageHeading
+        title="Observability"
+        description="Monitor your infrastructure, analyze usage patterns, and detect issues."
+      />
+      <Grid container spacing={2.5}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DashboardCard
+            icon={<AssessmentIcon />}
+            tone="primary"
+            title="Module Usage"
+            description="Analyze deployment distribution across versions and regions. Track adoption of new module versions."
+            onClick={() => handleNavigate('usage')}
+          />
 
-      {/* Assessment / Usage Card */}
-      <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-        <Card sx={{ height: '100%' }}>
-          <CardActionArea onClick={() => handleNavigate('usage')} sx={{ height: '100%', p: 2 }}>
-            <CardContent
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}
-            >
-              <AssessmentIcon color="primary" sx={{ fontSize: 60, mb: 2 }} />
-              <Typography variant="h5" component="div" gutterBottom>
-                Module Usage
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Analyze deployment distribution across versions and regions. Track adoption of new
-                module versions.
-              </Typography>
-            </CardContent>
-          </CardActionArea>
-        </Card>
-      </Grid>
-
-      {/* Velocity Card */}
-      {/* <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          {/* Velocity Card */}
+          {/* <Grid size={{ xs: 12, md: 6, lg: 4 }}>
                 <Card sx={{ height: '100%' }}>
                     <CardActionArea onClick={() => handleNavigate('velocity')} sx={{ height: '100%', p: 2 }}>
                         <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
@@ -1314,54 +1358,28 @@ export const ObservabilityPage = () => {
                     </CardActionArea>
                 </Card>
             </Grid> */}
+        </Grid>
 
-      {/* Health / Bad Deployments Card */}
-      <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-        <Card sx={{ height: '100%' }}>
-          <CardActionArea onClick={() => handleNavigate('health')} sx={{ height: '100%', p: 2 }}>
-            <CardContent
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}
-            >
-              <HealthAndSafetyIcon color="error" sx={{ fontSize: 60, mb: 2 }} />
-              <Typography variant="h5" component="div" gutterBottom>
-                Deployment Health
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Identify failed or drifting deployments. Find environments that need attention.
-              </Typography>
-            </CardContent>
-          </CardActionArea>
-        </Card>
-      </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DashboardCard
+            icon={<MonitorHeartIcon />}
+            tone="success"
+            title="Deployment Health"
+            description="Identify failed or drifting deployments. Find environments that need attention."
+            onClick={() => handleNavigate('health')}
+          />
+        </Grid>
 
-      {/* Module Issues Card */}
-      <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-        <Card sx={{ height: '100%' }}>
-          <CardActionArea onClick={() => handleNavigate('issues')} sx={{ height: '100%', p: 2 }}>
-            <CardContent
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}
-            >
-              <HealthAndSafetyIcon color="error" sx={{ fontSize: 60, mb: 2 }} />
-              <Typography variant="h5" component="div" gutterBottom>
-                Module Issues
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                View modules with the highest failure rates. Diagnose and resolve issues quickly.
-              </Typography>
-            </CardContent>
-          </CardActionArea>
-        </Card>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DashboardCard
+            icon={<ReportProblemIcon />}
+            tone="warning"
+            title="Module Issues"
+            description="View modules with the highest failure rates. Diagnose and resolve issues quickly."
+            onClick={() => handleNavigate('issues')}
+          />
+        </Grid>
       </Grid>
-    </Grid>
+    </Box>
   );
 };
