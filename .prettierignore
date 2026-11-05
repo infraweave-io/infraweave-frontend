@@ -4,3 +4,8 @@ node_modules/
 coverage/
 *.min.js
 *.map
+.github/
+!.github/workflows/ci.yml
+!.github/workflows/deploy-preview-cleanup.yml
+!.github/workflows/deploy-preview.yml
+!.github/workflows/deploy.yml
