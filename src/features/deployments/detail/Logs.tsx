@@ -50,7 +50,7 @@ export const Logs = (
     });
 
     try {
-      const params = new URLSearchParams({ limit: '300' });
+      const params = new URLSearchParams({ limit: '10000' });
       if (token) {
         params.append('next_token', token);
       }
