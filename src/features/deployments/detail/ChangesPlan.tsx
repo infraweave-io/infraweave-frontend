@@ -114,23 +114,27 @@ const ResourceChangesTable = ({ changes }: { changes: ResourceChange[] }) => {
     }
   };
 
-  // Helper function to check if a resource has only tag changes
+  // Attribute paths that only carry tags (exactly "tags"/"tags_all" or a nested key of either)
+  const isTagKey = (key: string) =>
+    key === 'tags' || key === 'tags_all' || key.startsWith('tags.') || key.startsWith('tags_all.');
+
+  // Helper function to check if a resource has only tag changes. Resources with no
+  // attribute diff at all are not tag-only: create/delete store full before/after state
+  // instead of a diff, and no-op resources are already excluded below.
   const isTagOnlyChange = (change: ResourceChange): boolean => {
-    if (!change.changes || Object.keys(change.changes).length === 0) {
-      return false;
-    }
-    // Check if ALL changes are tag-related (keys starting with "tags." or "tags_all." or exactly "tags" or "tags_all")
-    return Object.keys(change.changes).every(
-      (key) =>
-        key.startsWith('tags.') ||
-        key.startsWith('tags_all.') ||
-        key === 'tags' ||
-        key === 'tags_all',
-    );
+    const keys = change.changes ? Object.keys(change.changes) : [];
+    return keys.length > 0 && keys.every(isTagKey);
   };
 
+  // No-op resources are never listed: the plan stores no attribute diff for them, so a
+  // row would only ever say "No detailed changes available".
+  const changedResources = changes.filter((c) => c.action.toLowerCase() !== 'no-op');
+  const noOpCount = changes.length - changedResources.length;
+
   // Filter changes based on hideTagOnlyChanges setting
-  const filteredChanges = hideTagOnlyChanges ? changes.filter((c) => !isTagOnlyChange(c)) : changes;
+  const filteredChanges = hideTagOnlyChanges
+    ? changedResources.filter((c) => !isTagOnlyChange(c))
+    : changedResources;
 
   const data = filteredChanges.map((c) => ({
     actionCell: (
@@ -163,7 +167,12 @@ const ResourceChangesTable = ({ changes }: { changes: ResourceChange[] }) => {
         />
         {hideTagOnlyChanges && (
           <Typography variant="caption" color="text.secondary">
-            (Filtered {changes.length - filteredChanges.length} resources)
+            (Filtered {changedResources.length - filteredChanges.length} resources)
+          </Typography>
+        )}
+        {noOpCount > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            ({noOpCount} unchanged resources not shown)
           </Typography>
         )}
       </Box>
