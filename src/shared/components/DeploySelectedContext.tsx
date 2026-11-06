@@ -45,6 +45,15 @@ export const SelectedProjectProvider = ({ children }: { children: ReactNode }) =
     localStorage.setItem('selectedProjectName', JSON.stringify(selectedProjectName));
   }, [selectedProjectName]);
 
+  // Auto-select the only project when there is exactly one to choose from.
+  useEffect(() => {
+    if (loadingProjects) return;
+    if (!selectedProjectName && projects.length === 1) {
+      setSelectedProjectName(projects[0].name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, loadingProjects]);
+
   useEffect(() => {
     if (loadingProjects) return;
 
@@ -66,6 +75,15 @@ export const SelectedProjectProvider = ({ children }: { children: ReactNode }) =
 
     if (selectedRepositoryData && !newAvailableRepositoryData.includes(selectedRepositoryData)) {
       setSelectedRepositoryData(null);
+    }
+
+    // When only one option is available, select it automatically so the user doesn't
+    // have to pick from a list of one.
+    if (!selectedRegion && newAvailableRegions.length === 1) {
+      setSelectedRegion(newAvailableRegions[0]);
+    }
+    if (!selectedRepositoryData && newAvailableRepositoryData.length === 1) {
+      setSelectedRepositoryData(newAvailableRepositoryData[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectName, projects, loadingProjects]);

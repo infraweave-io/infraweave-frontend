@@ -42,6 +42,39 @@ test.describe('Module detail page', () => {
     });
   });
 
+  test('header Create button opens paginated deploy dialog ending in editable manifest', async ({
+    page,
+  }) => {
+    await page.goto(moduleUrl);
+
+    // Green "Create" button lives in the page header on every tab.
+    const createButton = page.getByRole('button', { name: 'Create' });
+    await expect(createButton).toBeVisible({ timeout: 10000 });
+    await createButton.click();
+
+    // s3bucket mock has two examples, so a picker menu appears first.
+    await page.getByRole('menuitem', { name: 'simple-bucket' }).click();
+
+    // Step 1 (Destination): project/repo were preselected, so Next is enabled.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Please set a destination for this deployment')).toBeVisible({
+      timeout: 10000,
+    });
+    await dialog.getByRole('button', { name: 'Next' }).click();
+
+    // Step 2 (Deployment configuration + variables): pick a region, then advance.
+    await expect(dialog.getByText('Please set a name for this deployment')).toBeVisible();
+    await dialog.getByLabel('Regions').click();
+    await page.getByRole('option').first().click();
+    await dialog.getByRole('button', { name: 'Next' }).click();
+
+    // Step 3 (Review & edit manifest): editor shows the generated claim, including the
+    // namespace derived from the Environment field (defaults to "default").
+    await expect(dialog.getByText('kind: S3Bucket', { exact: false })).toBeVisible();
+    await expect(dialog.getByText('namespace: default', { exact: false })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /create merge request/i })).toBeVisible();
+  });
+
   test('shows back button', async ({ page }) => {
     await page.goto(moduleUrl);
     await expect(page.getByRole('button', { name: 'back' })).toBeVisible({ timeout: 10000 });

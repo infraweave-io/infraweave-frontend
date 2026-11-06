@@ -55,12 +55,12 @@ cp .env.example .env.local
 
 Environment variables (prefix `REACT_APP_` or `VITE_`):
 
-| Variable                                 | Purpose                                        | Default                 |
-| ---------------------------------------- | ---------------------------------------------- | ----------------------- |
-| `REACT_APP_API_URL` / `VITE_API_URL`     | Backend API base URL                           | `http://localhost:8080` |
-| `REACT_APP_USE_MOCKS` / `VITE_USE_MOCKS` | Enable MSW mocking                             | `false`                 |
-| `REACT_APP_AUTH_DISABLED`                | Bypass login (dev only)                        | `false`                 |
-| `REACT_APP_OAUTH_PROVIDERS`              | JSON array of OAuth/OIDC providers — see below | —                       |
+| Variable                                 | Purpose                                                      | Default                 |
+| ---------------------------------------- | ------------------------------------------------------------ | ----------------------- |
+| `REACT_APP_API_URL` / `VITE_API_URL`     | Backend API base URL (chat uses `/api/v1/chat` on this host) | `http://localhost:8080` |
+| `REACT_APP_USE_MOCKS` / `VITE_USE_MOCKS` | Enable MSW mocking                                           | `false`                 |
+| `REACT_APP_AUTH_DISABLED`                | Bypass login (dev only)                                      | `false`                 |
+| `REACT_APP_OAUTH_PROVIDERS`              | JSON array of OAuth/OIDC providers — see below               | —                       |
 
 When mocks are on, the dev server skips its `/api` proxy and MSW handles every request. When mocks are off, the dev server proxies `/api/*` to `REACT_APP_API_URL` and forwards the `X-Trace-Id` response header.
 
