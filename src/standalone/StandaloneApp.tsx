@@ -184,9 +184,12 @@ const ScrollToTop: React.FC = () => {
 
 const GraphWrapper = () => {
   const config = useConfig();
+  // `file` is an API path, never a full URL, so a link can't point the fetch at another host.
+  const file = new URLSearchParams(window.location.search).get('file');
+  const dataUrl = file && /^\/?api\//.test(file) ? config.getApiUrl(file) : undefined;
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
-      <TerraformFlow fetcher={config.fetch} />
+      <TerraformFlow dataUrl={dataUrl} fetcher={config.fetch} />
     </div>
   );
 };

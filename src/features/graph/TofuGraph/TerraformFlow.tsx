@@ -361,8 +361,6 @@ function TerraformFlowContent({ dataUrl, initialData, fetcher }: TerraformFlowPr
       base64Data = searchParams.get('base64data');
     }
 
-    // 1. Prop URL or Query Param
-    const dataFile = dataUrl || searchParams.get('file');
     const themeParam = searchParams.get('theme') || hashParams.get('theme');
 
     if (themeParam && (themeParam === 'light' || themeParam === 'dark')) {
@@ -392,7 +390,7 @@ function TerraformFlowContent({ dataUrl, initialData, fetcher }: TerraformFlowPr
       }
     }
 
-    if (!dataFile) {
+    if (!dataUrl) {
       // Fallback or just ignore if used as component without data source yet
       // setLoadingError("No data source provided.");
       return;
@@ -400,7 +398,7 @@ function TerraformFlowContent({ dataUrl, initialData, fetcher }: TerraformFlowPr
 
     const doFetch = fetcher || fetch;
 
-    doFetch(dataFile)
+    doFetch(dataUrl)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
         return res.json();

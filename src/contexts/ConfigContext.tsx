@@ -80,8 +80,16 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
         return `${baseUrl}/${cleanPath}`;
       },
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-        // Add auth token to requests in standalone mode
-        if (isStandalone) {
+        // Add auth token to requests in standalone mode, but only for our own API:
+        // never hand the token to another host.
+        const { origin } = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        );
+        const isOwnApi =
+          origin === window.location.origin ||
+          origin === new URL(baseUrl, window.location.origin).origin;
+        if (isStandalone && isOwnApi) {
           const authDisabled = Env.AUTH_DISABLED;
 
           const buildRequest = (token: string | null): RequestInit => {
