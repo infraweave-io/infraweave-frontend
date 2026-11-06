@@ -41,6 +41,25 @@ test.describe('Deployment detail page', () => {
     await expect(page.getByText('0.0.15-dev+main.9').first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('inputs and outputs are collapsed by default and can be toggled', async ({ page }) => {
+    await page.goto(detailUrl);
+    const inputsToggle = page.getByRole('button', { name: /Deployment Inputs/ });
+    const outputsToggle = page.getByRole('button', { name: /Deployment Outputs/ });
+    await expect(inputsToggle).toHaveAttribute('aria-expanded', 'false', { timeout: 10000 });
+    await expect(outputsToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#deployment-inputs-content')).toBeHidden();
+    await expect(page.locator('#deployment-outputs-content')).toBeHidden();
+
+    await inputsToggle.click();
+    await expect(inputsToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#deployment-inputs-content')).toBeVisible();
+    await expect(page.locator('#deployment-outputs-content')).toBeHidden();
+
+    await inputsToggle.click();
+    await expect(inputsToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#deployment-inputs-content')).toBeHidden();
+  });
+
   test('events tab URL navigates to events view', async ({ page }) => {
     const eventsUrl = `/infraweave/deployment/${project}/${region}/${env}/${deploymentId}/events`;
     await page.goto(eventsUrl);
