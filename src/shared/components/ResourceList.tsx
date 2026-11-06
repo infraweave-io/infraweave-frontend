@@ -10,9 +10,11 @@ import {
   Typography,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { MONO_FONT } from '../../contexts/ThemeContext';
+import { shortenVersion } from '../../utils/version';
 
 type ResourceListProps = {
   items: Module[];
@@ -83,16 +85,27 @@ export const ResourceList = ({
 
     // Versions are machine-generated identifiers, so they get the mono stack;
     // a dash makes "no version on this track" explicit rather than blank.
+    // The label is elided (dev builds append a 40-char sha) but the link still
+    // carries the full version, and the tooltip shows it.
+    // `describeChild` renders a real `title` attribute on the child rather than an
+    // aria-label on the role-less span, which screen readers ignore — without it
+    // the full version is reachable by mouse only.
     const versionCell = (track: string, version: string) =>
       version ? (
-        <Link
-          to={`/infraweave/${resourceType}/${track}/${encodeURIComponent(
-            resource.module,
-          )}/${encodeURIComponent(version)}`}
-          style={{ fontFamily: MONO_FONT }}
-        >
-          {version}
-        </Link>
+        <Tooltip title={version} arrow placement="top" describeChild>
+          {/* The span is what Tooltip attaches its ref and handlers to; Link
+              does not forward a ref. */}
+          <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+            <Link
+              to={`/infraweave/${resourceType}/${track}/${encodeURIComponent(
+                resource.module,
+              )}/${encodeURIComponent(version)}`}
+              style={{ fontFamily: MONO_FONT }}
+            >
+              {shortenVersion(version)}
+            </Link>
+          </Box>
+        </Tooltip>
       ) : (
         <Box component="span" sx={{ color: 'text.disabled' }}>
           &mdash;
