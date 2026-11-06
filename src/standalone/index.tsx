@@ -52,6 +52,9 @@ async function enableMocking() {
 
   return worker.start({
     onUnhandledRequest: 'bypass',
+    // Register the worker under the deployed base path so PR previews served
+    // from a subpath (e.g. /pr-123/) resolve mockServiceWorker.js correctly.
+    serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
   });
 }
 
@@ -71,7 +74,10 @@ const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 enableMocking().then(() => {
   root.render(
     <React.StrictMode>
-      <StandaloneApp backendBaseUrl={backendBaseUrl} />
+      <StandaloneApp
+        backendBaseUrl={backendBaseUrl}
+        basename={import.meta.env.BASE_URL.replace(/\/$/, '')}
+      />
     </React.StrictMode>,
   );
 });

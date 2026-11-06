@@ -1,9 +1,4 @@
-import React, { useState } from 'react';
-import {
-  SimpleStepper,
-  SimpleStepperStep,
-  CodeSnippet,
-} from '../../standalone/components/ComponentAdapter';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Typography,
   Dialog,
@@ -14,7 +9,13 @@ import {
   TextField,
   Box,
   Autocomplete,
+  Alert,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import CodeMirror from '@uiw/react-codemirror';
 import { MONO_FONT } from '../../contexts/ThemeContext';
 import { Module, ModuleExample } from '../../types/Module';
 import EnvFilterPanel from './DeployEnvFilterPanel';
@@ -26,6 +27,41 @@ import { toYamlString } from '../../utils/yaml';
 import { MergeRequestOptions } from '../../types/MergeRequest';
 
 // Variable settings are dynamically imported per resource type to preserve context wiring
+
+interface BuildManifestArgs {
+  moduleName: string;
+  deploymentId: string;
+  environment: string;
+  region: string | null;
+  versionKey: string;
+  version: string | undefined;
+  variables: Record<string, any>;
+}
+
+// Single source of truth for the generated manifest so the editable preview and the
+// file committed to the pull request never drift apart.
+const buildManifestYaml = ({
+  moduleName,
+  deploymentId,
+  environment,
+  region,
+  versionKey,
+  version,
+  variables,
+}: BuildManifestArgs): string =>
+  `apiVersion: infraweave.io/v1
+kind: ${moduleName}
+metadata:
+  name: ${deploymentId}
+  namespace: ${environment}
+spec:
+  region: ${region ?? '<SPECIFY_REGION>'}
+  ${versionKey}: ${version ?? '<SPECIFY_VERSION>'}
+  variables:
+${toYamlString(variables, 4)}`;
+
+const STEPS = ['Destination', 'Deployment configuration', 'Review & edit manifest'] as const;
+
 interface DeployResourceDialogProps {
   openDialog: boolean;
   setOpenDialog: (open: boolean) => void;
@@ -48,8 +84,6 @@ export const DeployResourceDialog: React.FC<DeployResourceDialogProps> = ({
   resourceType,
   VariableSettings,
 }) => {
-  const args = { activeStep: 0 };
-
   const versionKey = resourceType === 'module' ? 'moduleVersion' : 'stackVersion';
 
   const [deployment_id, setDeploymentId] = useState<string>(
@@ -70,6 +104,49 @@ export const DeployResourceDialog: React.FC<DeployResourceDialogProps> = ({
 
   const [isClicked, setIsClicked] = useState(false);
   const [mergeRequestUrl, setMergeRequestUrl] = useState<string | null>(null);
+
+  // Which page of the wizard is visible. Steps are revealed gradually rather than all at once.
+  const [activeStep, setActiveStep] = useState(0);
+
+  // The manifest generated from the form fields above. Kept in a memo so the editable
+  // preview can re-sync to it until the user takes over the editor.
+  const generatedManifest = useMemo(
+    () =>
+      buildManifestYaml({
+        moduleName: module.module_name,
+        deploymentId: deployment_id,
+        environment,
+        region: selectedRegion,
+        versionKey,
+        version: module?.version,
+        variables,
+      }),
+    [
+      module.module_name,
+      module?.version,
+      deployment_id,
+      environment,
+      selectedRegion,
+      versionKey,
+      variables,
+    ],
+  );
+
+  // Free-form manifest the user can edit before opening the PR. `manifestEdited` freezes
+  // the auto-sync once the user has made a manual change so we don't clobber their work.
+  const [manifest, setManifest] = useState<string>(generatedManifest);
+  const [manifestEdited, setManifestEdited] = useState(false);
+
+  useEffect(() => {
+    if (!manifestEdited) {
+      setManifest(generatedManifest);
+    }
+  }, [generatedManifest, manifestEdited]);
+
+  const handleResetManifest = () => {
+    setManifest(generatedManifest);
+    setManifestEdited(false);
+  };
 
   const handleCreateMergeRequest = async () => {
     setIsClicked(true);
@@ -115,18 +192,8 @@ export const DeployResourceDialog: React.FC<DeployResourceDialogProps> = ({
         title: `Add deployment manifest for ${deployment_id}`,
         description: 'This merge request adds a manifest file to the project.',
         filePath: `${deployment_name}-${environment_name}.yaml`,
-        fileContent: `
-apiVersion: infraweave.io/v1
-kind: ${module.module_name}
-metadata:
-  name: ${deployment_id}
-  namespace: ${environment}
-spec:
-  region: ${selectedRegion}
-  ${versionKey}: ${module?.version ?? '<SPECIFY_VERSION>'}
-  variables:
-${toYamlString(variables, 4)}
-`,
+        // Commit exactly what the user reviewed/edited in the manifest editor.
+        fileContent: `${manifest.trimEnd()}\n`,
         commitMessage: `Add deployment manifest for ${deployment_id} to ${environment}`,
       });
 
@@ -137,8 +204,35 @@ ${toYamlString(variables, 4)}
     }
   };
 
+  // Whether the current page is complete enough to advance to the next one.
+  const canProceed = (): boolean => {
+    switch (activeStep) {
+      case 0: // Destination
+        return selectedProjectName !== '' && selectedRepositoryData !== null;
+      case 1: // Deployment configuration + variables
+        return (
+          deployment_id.length >= 3 &&
+          environment.length >= 3 &&
+          selectedRegion !== null &&
+          !hasInvalidVariables
+        );
+      default:
+        return true;
+    }
+  };
+
+  const isLastStep = activeStep === STEPS.length - 1;
+
+  const handleClose = () => {
+    setOpenDialog(false);
+  };
+
+  // Label/value row for the running summary. Values are theme-aware (mono font) rather
+  // than the old hardcoded navy, which was invisible against a dark theme.
+  const summaryValueSx = { fontFamily: MONO_FONT };
+
   return (
-    <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth disableEnforceFocus>
+    <Dialog open={openDialog} onClose={handleClose} fullWidth disableEnforceFocus>
       <DialogTitle>
         Deploy instance of {module.module} (
         <Box component="span" sx={{ fontFamily: MONO_FONT }}>
@@ -147,133 +241,158 @@ ${toYamlString(variables, 4)}
         )
       </DialogTitle>
       <DialogContent>
-        {/* Destination summary as a label/value grid. The values used to be
-            hardcoded navy spans, which are invisible against a dark theme. */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'auto 1fr',
-            columnGap: 2,
-            rowGap: 0.5,
-            mb: 2,
-          }}
-        >
-          {[
-            ['Project', selectedProjectName],
-            ['Repository', selectedRepositoryData?.repository_path],
-            ['Region', selectedRegion],
-            ...(deployment_id !== '' ? [['Deployment ID', deployment_id]] : []),
-            ...(environment !== '' ? [['Environment', environment]] : []),
-          ].map(([label, value]) => (
-            <React.Fragment key={label as string}>
-              <Typography variant="body2" color="text.secondary">
-                {label}
-              </Typography>
-              <Typography variant="body2" sx={{ fontFamily: MONO_FONT }}>
-                {value}
-              </Typography>
-            </React.Fragment>
+        <Stepper activeStep={activeStep} alternativeLabel sx={{ mt: 1, mb: 3 }}>
+          {STEPS.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
           ))}
-        </Box>
-        <SimpleStepper {...args}>
-          <SimpleStepperStep
-            title="Destination"
-            actions={{
-              canNext: () => selectedProjectName !== '' && selectedRepositoryData !== null,
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                Please set a destination for this deployment:
-                <br />
-                <EnvFilterPanel />
-                <br />
-              </div>
-              <br />
-            </div>
-          </SimpleStepperStep>
-          <SimpleStepperStep
-            title="Deployment configuration"
-            actions={{
-              canNext: () =>
-                deployment_id.length >= 3 && environment.length >= 3 && selectedRegion !== null,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              Please set a name for this deployment:
-              <br />
-              <br />
-              <TextField
-                label="Deployment ID"
-                value={deployment_id}
-                onChange={(e) => setDeploymentId(e.target.value)}
-              />
-              <br />
-              <TextField
-                label="Environment"
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value)}
-              />
-              <br />
-              <Box mt={2} />
-              <Typography variant="subtitle1">Select Region:</Typography>
-              <br />
-              <Autocomplete
-                value={selectedRegion}
-                options={availableRegions}
-                onChange={(_event, newValue) => {
-                  if (newValue !== null) setRegionSelection(newValue);
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Regions" variant="outlined" />
-                )}
-              />
-            </div>
-          </SimpleStepperStep>
-          <SimpleStepperStep
-            title="Set variables"
-            actions={{
-              canNext: () => !hasInvalidVariables,
-            }}
-          >
-            <VariableSettings module={module} example={example} moduleName={module.module_name} />
-          </SimpleStepperStep>
-          <SimpleStepperStep title="Verify changes">
-            <div>
-              This version introduces following changes:
-              <CodeSnippet
-                language="yaml"
-                showLineNumbers
-                showCopyCodeButton
-                text={`
-# Example claim for deploying a ${resourceType}
-apiVersion: infraweave.io/v1
-kind: ${module.module_name}
-metadata:
-  name: ${deployment_id}
-  namespace: ${environment}
-spec:
-  region: ${selectedRegion}
-  ${versionKey}: ${module?.version ?? 'defaultVersion'}
-  variables:
-${toYamlString(variables, 4)}
-    `}
-              />
-            </div>
-          </SimpleStepperStep>
-          <SimpleStepperStep title="Finish" actions={{ showNext: false, showBack: false }} end>
-            <div>
-              <br />
-              <Typography>
-                Click the button below to initiate a merge request for creating this manifest
+        </Stepper>
+
+        {/* Running summary of choices made so far. */}
+        {activeStep > 0 && (
+          <Box mb={2}>
+            {selectedProjectName && (
+              <Typography variant="body2">
+                Project:{' '}
+                <Box component="span" sx={summaryValueSx}>
+                  {selectedProjectName}
+                </Box>
               </Typography>
-              <br />
+            )}
+            {selectedRepositoryData?.repository_path && (
+              <Typography variant="body2">
+                Repository:{' '}
+                <Box component="span" sx={summaryValueSx}>
+                  {selectedRepositoryData.repository_path}
+                </Box>
+              </Typography>
+            )}
+            {selectedRegion && (
+              <Typography variant="body2">
+                Region:{' '}
+                <Box component="span" sx={summaryValueSx}>
+                  {selectedRegion}
+                </Box>
+              </Typography>
+            )}
+            {deployment_id && (
+              <Typography variant="body2">
+                Deployment ID:{' '}
+                <Box component="span" sx={summaryValueSx}>
+                  {deployment_id}
+                </Box>
+              </Typography>
+            )}
+            {environment && (
+              <Typography variant="body2">
+                Environment:{' '}
+                <Box component="span" sx={summaryValueSx}>
+                  {environment}
+                </Box>
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Step 1: Destination — project and repository. */}
+        {activeStep === 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            Please set a destination for this deployment:
+            <br />
+            <EnvFilterPanel />
+          </div>
+        )}
+
+        {/* Step 2: Deployment configuration + variables. */}
+        {activeStep === 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography>Please set a name for this deployment:</Typography>
+            <br />
+            <TextField
+              label="Deployment ID"
+              value={deployment_id}
+              onChange={(e) => setDeploymentId(e.target.value)}
+            />
+            <Box mt={2} />
+            <TextField
+              label="Environment"
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value)}
+            />
+            <Box mt={2} />
+            <Typography variant="subtitle1">Select Region:</Typography>
+            <br />
+            <Autocomplete
+              value={selectedRegion}
+              options={availableRegions}
+              onChange={(_event, newValue) => {
+                if (newValue !== null) setRegionSelection(newValue);
+              }}
+              renderInput={(params) => <TextField {...params} label="Regions" variant="outlined" />}
+            />
+            <Box mt={3} />
+            <VariableSettings module={module} example={example} moduleName={module.module_name} />
+          </div>
+        )}
+
+        {/* Step 3: Review & edit the generated manifest, then open the PR. */}
+        {activeStep === 2 && (
+          <div>
+            <Typography gutterBottom>
+              Review the generated {resourceType} claim below. You can edit it directly before
+              opening the pull request &mdash; this exact content is what gets committed.
+            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mt={1} mb={1}>
+              {manifestEdited ? (
+                <Typography variant="caption" color="text.secondary">
+                  Manually edited &mdash; changes to the fields above no longer update this
+                  manifest.
+                </Typography>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Auto-generated from your selections above.
+                </Typography>
+              )}
+              <Button
+                size="small"
+                startIcon={<RestartAltIcon />}
+                onClick={handleResetManifest}
+                disabled={!manifestEdited}
+              >
+                Reset to generated
+              </Button>
+            </Box>
+            <Box
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                overflow: 'auto',
+                maxHeight: '360px',
+              }}
+            >
+              <CodeMirror
+                value={manifest}
+                onChange={(value) => {
+                  setManifest(value);
+                  setManifestEdited(true);
+                }}
+                style={{ fontSize: '14px' }}
+              />
+            </Box>
+            {manifest.trim() === '' && (
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                The manifest is empty. Add content before creating the pull request.
+              </Alert>
+            )}
+            <Box mt={2}>
               {!mergeRequestUrl ? (
                 <Button
                   variant="contained"
                   color="primary"
                   onClick={handleCreateMergeRequest}
-                  disabled={isClicked}
+                  disabled={isClicked || manifest.trim() === ''}
                 >
                   Create merge request
                 </Button>
@@ -287,14 +406,30 @@ ${toYamlString(variables, 4)}
                   View Merge Request
                 </Button>
               )}
-            </div>
-          </SimpleStepperStep>
-        </SimpleStepper>
+            </Box>
+          </div>
+        )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => setOpenDialog(false)} color="primary">
+        <Button onClick={handleClose} color="primary">
           Cancel
         </Button>
+        <Box flexGrow={1} />
+        <Button
+          onClick={() => setActiveStep((prev) => prev - 1)}
+          disabled={activeStep === 0 || Boolean(mergeRequestUrl)}
+        >
+          Back
+        </Button>
+        {!isLastStep && (
+          <Button
+            variant="contained"
+            onClick={() => setActiveStep((prev) => prev + 1)}
+            disabled={!canProceed()}
+          >
+            Next
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

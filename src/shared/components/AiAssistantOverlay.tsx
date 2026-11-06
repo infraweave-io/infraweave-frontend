@@ -343,22 +343,20 @@ export const AiAssistantOverlay: React.FC = () => {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const chatApiUrl = config.getApiUrl('api/proxy/api/infraweave/api/v1/chat');
 
     try {
-      const response = await config.fetch(
-        config.getApiUrl('api/proxy/api/infraweave/api/v1/chat'),
-        {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: buildContextualMessage(trimmed, history),
-            ...(track.trim() ? { track: track.trim() } : {}),
-          }),
+      const response = await config.fetch(chatApiUrl, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          message: buildContextualMessage(trimmed, history),
+          ...(track.trim() ? { track: track.trim() } : {}),
+        }),
+      });
 
       if (!response.ok) {
         throw new Error(`Chat request failed with ${response.status}`);

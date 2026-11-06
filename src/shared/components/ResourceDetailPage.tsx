@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Module } from '../../types/Module';
+import { Module, ModuleExample } from '../../types/Module';
 import { ResourcePage } from './ResourcePage';
 import { InformationTab, UsageTab } from './ResourceTabs';
 import {
@@ -16,12 +16,15 @@ import {
   ToggleButtonGroup,
   Alert,
   Collapse,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
 import CodeIcon from '@mui/icons-material/Code';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import {
   InfoCard,
   CodeSnippet,
@@ -69,8 +72,12 @@ export const ResourceDetailPage: React.FC<ResourceDetailPageProps> = ({ resource
 
   const [view, setView] = useState('manifest');
   const [openDialog, setOpenDialog] = useState(false);
+  // The example the deploy dialog is currently seeded from. Chosen either from the header
+  // "Create" button or from an individual example's Deploy button.
+  const [deployExample, setDeployExample] = useState<ModuleExample | null>(null);
+  // Anchor for the example picker menu shown when a resource has more than one example.
+  const [deployMenuAnchor, setDeployMenuAnchor] = useState<null | HTMLElement>(null);
   const [openVersionsModal, setOpenVersionsModal] = useState(false);
-  const [exampleIndex, setExampleIndex] = useState<number>(-1);
   const [openCompareDialog, setOpenCompareDialog] = useState(false);
   const [initialCompareVersion, setInitialCompareVersion] = useState<string | undefined>(undefined);
   const [initialCompareTrack, setInitialCompareTrack] = useState<string | undefined>(undefined);
@@ -111,11 +118,61 @@ export const ResourceDetailPage: React.FC<ResourceDetailPageProps> = ({ resource
     zipBrowser.browse(url, name, version);
   };
 
+  // Seed the deploy dialog from a specific example and open it.
+  const openDeployDialog = (example: ModuleExample) => {
+    setDeployMenuAnchor(null);
+    setDeployExample(example);
+    setOpenDialog(true);
+  };
+
+  // The "Create" action seeds the deploy dialog from an example. With a single example we
+  // open the dialog immediately; with several we let the user pick which one to start from.
+  const handleCreateClick = (event: React.MouseEvent<HTMLElement>, examples: ModuleExample[]) => {
+    if (examples.length === 1) {
+      openDeployDialog(examples[0]);
+    } else {
+      setDeployMenuAnchor(event.currentTarget);
+    }
+  };
+
+  // The green "Create" action, rendered separately so it can sit in the top-right corner
+  // (after all other header buttons).
+  const deployAction = (data: Module | undefined) => {
+    if (!data?.s3_key) return null;
+    const examples: ModuleExample[] = data.manifest?.spec?.examples ?? [];
+    if (examples.length === 0) return null;
+    return (
+      <>
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={<RocketLaunchIcon />}
+          onClick={(e) => handleCreateClick(e, examples)}
+          sx={{ color: 'common.white' }}
+        >
+          Create
+        </Button>
+        <Menu
+          anchorEl={deployMenuAnchor}
+          open={Boolean(deployMenuAnchor)}
+          onClose={() => setDeployMenuAnchor(null)}
+        >
+          {examples.map((example) => (
+            <MenuItem key={example.name} onClick={() => openDeployDialog(example)}>
+              {example.name}
+            </MenuItem>
+          ))}
+        </Menu>
+      </>
+    );
+  };
+
   const headerActions = (data: Module | undefined) => {
     if (!data?.s3_key) return null;
+    const examples: ModuleExample[] = data.manifest?.spec?.examples ?? [];
     return (
       <Box display="flex" gap={1}>
-        {data?.manifest?.spec?.examples && data.manifest.spec.examples.length > 0 && (
+        {examples.length > 0 && (
           <Button
             startIcon={<InfoIcon />}
             variant="outlined"
@@ -286,38 +343,17 @@ spec:
                   </Typography>
                 </InfoCard>
                 <Box p={1} />
-                {value?.manifest.spec.examples?.map((example, index) => (
-                  <div key={`variable-provider-${example.name}-${value.module_name}`}>
-                    {resourceName != null && exampleIndex === index && (
-                      <React.Suspense fallback={null}>
-                        <SelectedProjectProvider>
-                          <VariableProvider
-                            example={example}
-                            key={`variable-provider-${example.name}-${value.module_name}`}
-                          >
-                            <DeployResourceDialog
-                              openDialog={openDialog}
-                              setOpenDialog={setOpenDialog}
-                              deployModule={() => {}}
-                              module={value!}
-                              example={example}
-                              resourceType={resourceType}
-                              VariableSettings={DeploymentVariableSettings}
-                            />
-                          </VariableProvider>
-                        </SelectedProjectProvider>
-                      </React.Suspense>
-                    )}
+                {value?.manifest.spec.examples?.map((example) => (
+                  <div key={`example-${example.name}-${value.module_name}`}>
                     <InfoCard>
                       <Box display="flex" justifyContent="space-between" alignItems="center">
                         <Typography variant="h6">{example.name}</Typography>
                         <Button
                           variant="contained"
-                          color="primary"
-                          onClick={() => {
-                            setExampleIndex(index);
-                            setOpenDialog(true);
-                          }}
+                          color="success"
+                          startIcon={<RocketLaunchIcon />}
+                          onClick={() => openDeployDialog(example)}
+                          sx={{ color: 'common.white' }}
                         >
                           Deploy
                         </Button>
@@ -375,6 +411,31 @@ spec:
     return (
       <>
         {content}
+        {/* Deploy dialog — mounted on every tab so the header "Create" button and each
+            example's "Deploy" button share a single instance, seeded from deployExample. */}
+        {resourceName != null && value && deployExample && (
+          <React.Suspense fallback={null}>
+            <SelectedProjectProvider>
+              <VariableProvider
+                example={deployExample}
+                key={`deploy-${deployExample.name}-${value.module_name}`}
+              >
+                <DeployResourceDialog
+                  openDialog={openDialog}
+                  setOpenDialog={(open) => {
+                    setOpenDialog(open);
+                    if (!open) setDeployExample(null);
+                  }}
+                  deployModule={() => {}}
+                  module={value}
+                  example={deployExample}
+                  resourceType={resourceType}
+                  VariableSettings={DeploymentVariableSettings}
+                />
+              </VariableProvider>
+            </SelectedProjectProvider>
+          </React.Suspense>
+        )}
         {openCompareDialog && value && (
           <CompareVersionsDialog
             open={openCompareDialog}
@@ -405,6 +466,7 @@ spec:
             <Button variant="outlined" onClick={() => setOpenVersionsModal(true)}>
               Versions
             </Button>
+            {deployAction(data)}
           </Box>
         )}
       />

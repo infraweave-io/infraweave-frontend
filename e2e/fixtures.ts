@@ -29,6 +29,10 @@ export async function preselectProject(page: Page) {
   await page.addInitScript((project) => {
     localStorage.setItem('selectedProviders', JSON.stringify(['aws']));
     localStorage.setItem('selectedProjectNames', JSON.stringify([project.name]));
+    // Singular key drives the deploy dialog's DeploySelectedContext (list pages
+    // use the plural key above). Preselecting it lets the wizard auto-pick the
+    // project's lone webhook repository so step 1 can advance without manual input.
+    localStorage.setItem('selectedProjectName', JSON.stringify(project.name));
     localStorage.setItem('selectedRegions', JSON.stringify(['us-west-2', 'eu-central-1']));
     localStorage.setItem('cachedProjects', JSON.stringify([project]));
     // Match the e2e bundle's mode (USE_MOCKS=false → 'real'), otherwise the

@@ -11,6 +11,14 @@ export const projects = [
       'us-west-2': { git_provider: 'gitlab', project_id: '123456700' },
     },
     regions: ['eu-central-1', 'us-west-2', 'us-east-1'],
+    repositories: [
+      {
+        git_provider: 'github',
+        git_url: 'https://github.com/infraweave/dev-account-22',
+        repository_path: 'infraweave/dev-account-22',
+        type: 'webhook',
+      },
+    ],
   },
   {
     PK: 'PROJECTS',
@@ -24,6 +32,14 @@ export const projects = [
       'us-west-2': { git_provider: 'gitlab', project_id: '123456700' },
     },
     regions: ['eu-central-1', 'us-west-2'],
+    repositories: [
+      {
+        git_provider: 'github',
+        git_url: 'https://github.com/infraweave/staging-account-22',
+        repository_path: 'infraweave/staging-account-22',
+        type: 'webhook',
+      },
+    ],
   },
   {
     PK: 'PROJECTS',
@@ -37,5 +53,13 @@ export const projects = [
       'us-west-2': { git_provider: 'gitlab', project_id: '123456700' },
     },
     regions: ['eu-central-1', 'us-west-2'],
+    repositories: [
+      {
+        git_provider: 'github',
+        git_url: 'https://github.com/infraweave/prod-account-22',
+        repository_path: 'infraweave/prod-account-22',
+        type: 'webhook',
+      },
+    ],
   },
 ];

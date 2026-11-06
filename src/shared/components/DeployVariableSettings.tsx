@@ -118,20 +118,26 @@ const VariableInputItem = ({
   };
 
   return (
-    <div
-      style={{
-        marginTop: '15px',
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-      }}
-    >
-      {renderVariableInput()}
-      <ModuleVariablePopover variable={variable}>
-        <IconButton>
-          <InfoIcon color="primary" />
-        </IconButton>
-      </ModuleVariablePopover>
+    <div style={{ marginTop: '15px' }}>
+      {variable.description && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          {variable.description}
+        </Typography>
+      )}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        {renderVariableInput()}
+        <ModuleVariablePopover variable={variable}>
+          <IconButton>
+            <InfoIcon color="primary" />
+          </IconButton>
+        </ModuleVariablePopover>
+      </div>
     </div>
   );
 };

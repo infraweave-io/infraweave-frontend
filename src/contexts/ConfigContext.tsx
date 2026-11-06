@@ -59,7 +59,13 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
           // Check if running in development mode
           const isDev = process.env.NODE_ENV === 'development';
 
-          if (isDev) {
+          // Mock mode (MSW) must issue same-origin relative requests. A built
+          // preview is served over HTTPS, so an absolute http://localhost:8080
+          // URL would be blocked as mixed content before MSW could intercept it.
+          // MSW's handlers match a `*` wildcard, so relative paths still hit them.
+          const useMocks = process.env.REACT_APP_USE_MOCKS === 'true';
+
+          if (isDev || useMocks) {
             // In dev mode, use relative path to leverage Vite proxy
             return `/${apiPath}`;
           }
