@@ -27,7 +27,23 @@ type ResourceListProps = {
   }>;
 };
 
-const groupResourcesByName = (modules: Module[]) => {
+type ResourceRow = {
+  module: string;
+  module_name: string;
+  stable_version: string;
+  beta_version: string;
+  alpha_version: string;
+  dev_version: string;
+};
+
+// Rows arrive page by page and the API orders them by track before name (the
+// DynamoDB sort key is `MODULE#<track>::<module>`), so without an explicit sort
+// every new page reshuffles rows the user is already looking at. Sort on the
+// name that is actually rendered.
+const byDisplayName = (a: ResourceRow, b: ResourceRow) =>
+  a.module_name.localeCompare(b.module_name, undefined, { sensitivity: 'base' });
+
+const groupResourcesByName = (modules: Module[]): ResourceRow[] => {
   const groupedResources = modules.reduce(
     (acc: { [key: string]: { tracks: { [key: string]: string }; module_name?: string } }, mod) => {
       if (!acc[mod.module]) {
@@ -42,14 +58,16 @@ const groupResourcesByName = (modules: Module[]) => {
     {},
   );
 
-  return Object.entries(groupedResources).map(([moduleName, data]) => ({
-    module: moduleName,
-    module_name: data.module_name || moduleName,
-    stable_version: data.tracks.stable || '',
-    beta_version: data.tracks.beta || '',
-    alpha_version: data.tracks.alpha || '',
-    dev_version: data.tracks.dev || '',
-  }));
+  return Object.entries(groupedResources)
+    .map(([moduleName, data]) => ({
+      module: moduleName,
+      module_name: data.module_name || moduleName,
+      stable_version: data.tracks.stable || '',
+      beta_version: data.tracks.beta || '',
+      alpha_version: data.tracks.alpha || '',
+      dev_version: data.tracks.dev || '',
+    }))
+    .sort(byDisplayName);
 };
 
 export const ResourceList = ({

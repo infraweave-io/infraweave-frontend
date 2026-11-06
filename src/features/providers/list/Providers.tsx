@@ -1,34 +1,30 @@
 import React from 'react';
-import { useConfig } from '../../../hooks/useConfig';
 import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
-import { useAsync } from '../../../hooks/useAsync';
+import { usePaginatedItems } from '../../../hooks/usePaginatedItems';
 import { Provider } from '../../../types/Provider';
 import { Table, TableColumn, Link } from '../../../standalone/components/ComponentAdapter';
+import { LoadingMore } from '../../../shared/components/LoadingMore';
+import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { Box } from '@mui/material';
 
 export const Providers = () => {
-  const config = useConfig();
-  const { value, loading, error } = useAsync(async (): Promise<Provider[]> => {
-    const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/providers');
+  const {
+    items: value,
+    loading,
+    truncated,
+    error,
+  } = usePaginatedItems<Provider>('api/proxy/api/infraweave/api/v1/providers', 'providers');
 
-    const response = await config.fetch(url);
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error('Redirected to login or guest page');
-    }
-    if (!response.ok) throw new Error('Failed to fetch providers');
-
-    const json = await response.json();
-    return json.Items || json.items || json;
-  }, []);
-
-  if (loading) {
-    return <Progress />;
-  } else if (error) {
+  // Only take over the whole view when there is nothing to show. A failure on a
+  // later page keeps the pages already loaded, with the error beside them.
+  if (error && value.length === 0) {
     return <ResponseErrorPanel error={error} />;
+  } else if (loading && value.length === 0) {
+    return <Progress />;
   }
 
   // Group providers by name and track
-  const groupedProviders = (value || []).reduce(
+  const groupedProviders = value.reduce(
     (acc: { [key: string]: { tracks: { [key: string]: string }; name?: string } }, provider) => {
       const providerName = provider.name;
       const track = provider.track || 'stable';
@@ -42,44 +38,59 @@ export const Providers = () => {
     {},
   );
 
-  const data = Object.entries(groupedProviders).map(([providerName, data]) => ({
-    provider: providerName,
-    name: data.name || providerName,
-    stable_version: data.tracks.stable || '',
-    beta_version: data.tracks.beta || '',
-    alpha_version: data.tracks.alpha || '',
-    dev_version: data.tracks.dev || '',
-  }));
+  const data = Object.entries(groupedProviders)
+    .map(([providerName, data]) => ({
+      provider: providerName,
+      name: data.name || providerName,
+      stable_version: data.tracks.stable || '',
+      beta_version: data.tracks.beta || '',
+      alpha_version: data.tracks.alpha || '',
+      dev_version: data.tracks.dev || '',
+    }))
+    // Rows arrive page by page, so an explicit sort is what keeps already-visible
+    // rows from being reshuffled as the rest of the list loads.
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   const columns: TableColumn[] = [
     {
       title: 'Provider',
       field: 'name',
-      render: (row: any) => (
-        <Box
-          component="span"
-          sx={{
-            cursor: 'pointer',
-            '&:hover': {
-              textDecoration: 'underline',
-              color: 'primary.main',
-            },
-          }}
-        >
-          <Link
-            to={`/infraweave/provider/stable/${encodeURIComponent(row.name)}/${encodeURIComponent(
-              row.stable_version,
-            )}`}
+      render: (row: any) =>
+        // The detail route is keyed by stable version. Mid-load a provider can be
+        // seen on a non-stable track first, and linking to an empty version routes
+        // nowhere — so stay unlinked until the stable record arrives.
+        row.stable_version ? (
+          <Box
+            component="span"
+            sx={{
+              cursor: 'pointer',
+              '&:hover': {
+                textDecoration: 'underline',
+                color: 'primary.main',
+              },
+            }}
           >
-            {row.name}
-          </Link>
-        </Box>
-      ),
+            <Link
+              to={`/infraweave/provider/stable/${encodeURIComponent(row.name)}/${encodeURIComponent(
+                row.stable_version,
+              )}`}
+            >
+              {row.name}
+            </Link>
+          </Box>
+        ) : (
+          <Box component="span">{row.name}</Box>
+        ),
     },
     { title: 'Current Version', field: 'stable_version' },
   ];
 
   return (
-    <Table options={{ search: true, paging: true, pageSize: 10 }} columns={columns} data={data} />
+    <>
+      <Table options={{ search: true, paging: true, pageSize: 10 }} columns={columns} data={data} />
+      {loading && <LoadingMore />}
+      {truncated && <ListIncomplete label="providers" />}
+      {error && <ResponseErrorPanel error={error} />}
+    </>
   );
 };

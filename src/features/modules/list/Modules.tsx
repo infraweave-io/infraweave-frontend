@@ -1,34 +1,34 @@
 import React from 'react';
-import { useConfig } from '../../../hooks/useConfig';
 import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
-import { useAsync } from '../../../hooks/useAsync';
+import { usePaginatedItems } from '../../../hooks/usePaginatedItems';
 import { Module } from '../../../types/Module';
 import { ResourceList } from '../../../shared/components/ResourceList';
+import { LoadingMore } from '../../../shared/components/LoadingMore';
+import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { ModuleVersions } from '../detail/ModuleVersions';
 
 export const Modules = () => {
-  const config = useConfig();
-  const { value, loading, error } = useAsync(async (): Promise<Module[]> => {
-    const url = config.getApiUrl(
-      'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
-    );
-    const response = await config.fetch(url);
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error('Redirected to login or guest page');
-    }
-    if (!response.ok) throw new Error('Failed to fetch modules');
+  const { items, loading, truncated, error } = usePaginatedItems<Module>(
+    'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
+    'modules',
+  );
 
-    const json = await response.json();
-    return json.Items || json.items || json;
-  }, []);
-
-  if (loading) {
-    return <Progress />;
-  } else if (error) {
+  // Only take over the whole view when there is nothing to show. A failure on a
+  // later page keeps the pages already loaded, with the error beside them.
+  if (error && items.length === 0) {
     return <ResponseErrorPanel error={error} />;
+  } else if (loading && items.length === 0) {
+    // Only for a cold start. Once the first page is on screen the list keeps
+    // filling in behind the inline indicator instead of blanking out again.
+    return <Progress />;
   }
 
   return (
-    <ResourceList items={value || []} resourceType="module" VersionsComponent={ModuleVersions} />
+    <>
+      <ResourceList items={items} resourceType="module" VersionsComponent={ModuleVersions} />
+      {loading && <LoadingMore />}
+      {truncated && <ListIncomplete label="modules" />}
+      {error && <ResponseErrorPanel error={error} />}
+    </>
   );
 };
