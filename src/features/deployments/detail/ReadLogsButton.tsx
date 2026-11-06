@@ -96,7 +96,6 @@ export const DrawerContent = ({
   jobStatus?: string;
 }) => {
   const status = jobStatus || event?.status;
-  const config = useConfig();
   const theme = useTheme();
 
   return (
@@ -149,10 +148,7 @@ export const DrawerContent = ({
                 const encodedDeploymentId = encodeURIComponent(deployment?.deployment_id ?? '');
                 const changeType = event?.event?.toUpperCase() ?? 'UNKNOWN';
 
-                // Using config.getApiUrl() instead of backendBaseUrl
-                const graphUrl = config.getApiUrl(
-                  `api/proxy/api/infraweave/api/v1/change_record_graph/${deployment?.project_id}/${deployment?.region}/${encodedEnvironment}/${encodedDeploymentId}/${encodedJobId}/${changeType}`,
-                );
+                const graphUrl = `api/proxy/api/infraweave/api/v1/change_record_graph/${deployment?.project_id}/${deployment?.region}/${encodedEnvironment}/${encodedDeploymentId}/${encodedJobId}/${changeType}`;
 
                 const params = new URLSearchParams({
                   file: graphUrl,
