@@ -1,20 +1,97 @@
 import React from 'react';
 import { useConfig } from '../../../hooks/useConfig';
-import { Typography, Box, Card, CardContent, Chip, Tooltip, IconButton } from '@mui/material';
+import {
+  Typography,
+  Box,
+  ButtonBase,
+  Card,
+  CardContent,
+  Chip,
+  Collapse,
+  Tooltip,
+  IconButton,
+} from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CodeIcon from '@mui/icons-material/Code';
 import DataObjectIcon from '@mui/icons-material/DataObject';
-import {
-  InfoCard,
-  Progress,
-  ResponseErrorPanel,
-} from '../../../standalone/components/ComponentAdapter';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Progress, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
 import { Module } from '../../../types/Module';
 import { Deployment } from '../../../types/Deployment';
 import { useAsync } from '../../../hooks/useAsync';
 
+const CollapsibleSection = (props: {
+  id: string;
+  title: string;
+  count?: number;
+  expanded: boolean;
+  onToggle: () => void;
+  headerAction?: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  const { id, title, count, expanded, onToggle, headerAction, children } = props;
+  const contentId = `${id}-content`;
+
+  return (
+    <Card>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          pr: headerAction ? 2 : 0,
+          // Highlight the whole header row, including the action area, when the toggle is hovered
+          '&:has(.section-toggle:hover), &:has(.section-toggle.Mui-focusVisible)': {
+            backgroundColor: 'action.hover',
+          },
+        }}
+      >
+        <ButtonBase
+          className="section-toggle"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          focusRipple
+          sx={{
+            flex: 1,
+            justifyContent: 'flex-start',
+            gap: 1,
+            px: 2,
+            py: 1.5,
+            textAlign: 'left',
+          }}
+        >
+          <ExpandMoreIcon
+            fontSize="small"
+            sx={{
+              color: 'text.secondary',
+              transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: (theme) => theme.transitions.create('transform'),
+            }}
+          />
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{title}</Typography>
+          {count !== undefined && (
+            <Chip label={count} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            {expanded ? 'Collapse' : 'Expand'}
+          </Typography>
+        </ButtonBase>
+        {headerAction}
+      </Box>
+      <Collapse in={expanded} id={contentId}>
+        <CardContent sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+          {children}
+        </CardContent>
+      </Collapse>
+    </Card>
+  );
+};
+
 export const InputsOutputs = (props: { deployment?: Deployment } = { deployment: undefined }) => {
   const [formatMode, setFormatMode] = React.useState<'yaml' | 'json'>('yaml');
+  const [inputsExpanded, setInputsExpanded] = React.useState(false);
+  const [outputsExpanded, setOutputsExpanded] = React.useState(false);
 
   const snakeToCamelCase = (str: string) => {
     if (str === null || str === undefined) {
@@ -75,29 +152,28 @@ export const InputsOutputs = (props: { deployment?: Deployment } = { deployment:
     return <ResponseErrorPanel error={error} />;
   }
 
+  const formatToggle = (
+    <Chip
+      icon={formatMode === 'yaml' ? <CodeIcon /> : <DataObjectIcon />}
+      label={formatMode === 'yaml' ? 'YAML' : 'JSON'}
+      size="small"
+      onClick={() => setFormatMode((prev) => (prev === 'yaml' ? 'json' : 'yaml'))}
+      sx={{ cursor: 'pointer' }}
+    />
+  );
+
+  const hasOutputs = !!props.deployment?.output && props.deployment.status === 'successful';
+
   return (
     <Box display="flex" flexDirection="column">
       <Box>
-        <InfoCard
-          title={
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                width: '100%',
-              }}
-            >
-              <span>Deployment Inputs</span>
-              <Chip
-                icon={formatMode === 'yaml' ? <CodeIcon /> : <DataObjectIcon />}
-                label={formatMode === 'yaml' ? 'YAML' : 'JSON'}
-                size="small"
-                onClick={() => setFormatMode((prev) => (prev === 'yaml' ? 'json' : 'yaml'))}
-                sx={{ cursor: 'pointer' }}
-              />
-            </Box>
-          }
+        <CollapsibleSection
+          id="deployment-inputs"
+          title="Deployment Inputs"
+          count={value?.tf_variables?.length ?? 0}
+          expanded={inputsExpanded}
+          onToggle={() => setInputsExpanded((prev) => !prev)}
+          headerAction={inputsExpanded ? formatToggle : undefined}
         >
           <Box display="flex" flexDirection="column" gap={1}>
             {(value?.tf_variables ?? []).map((tf_variable) => {
@@ -293,34 +369,21 @@ export const InputsOutputs = (props: { deployment?: Deployment } = { deployment:
               );
             })}
           </Box>
-        </InfoCard>
+        </CollapsibleSection>
       </Box>
 
       <Box marginTop={3}>
-        <InfoCard
-          title={
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                width: '100%',
-              }}
-            >
-              <span>Deployment Outputs</span>
-              <Chip
-                icon={formatMode === 'yaml' ? <CodeIcon /> : <DataObjectIcon />}
-                label={formatMode === 'yaml' ? 'YAML' : 'JSON'}
-                size="small"
-                onClick={() => setFormatMode((prev) => (prev === 'yaml' ? 'json' : 'yaml'))}
-                sx={{ cursor: 'pointer' }}
-              />
-            </Box>
-          }
+        <CollapsibleSection
+          id="deployment-outputs"
+          title="Deployment Outputs"
+          count={hasOutputs ? Object.keys(props.deployment?.output ?? {}).length : undefined}
+          expanded={outputsExpanded}
+          onToggle={() => setOutputsExpanded((prev) => !prev)}
+          headerAction={outputsExpanded ? formatToggle : undefined}
         >
           <Box display="flex" flexDirection="column" gap={1}>
-            {props.deployment?.output && props.deployment.status === 'successful' ? (
-              Object.entries(props.deployment.output).map(([key, value]) => {
+            {hasOutputs ? (
+              Object.entries(props.deployment?.output ?? {}).map(([key, value]) => {
                 const displayName =
                   key.split('__').length > 1
                     ? (() => {
@@ -492,7 +555,7 @@ export const InputsOutputs = (props: { deployment?: Deployment } = { deployment:
               </Typography>
             )}
           </Box>
-        </InfoCard>
+        </CollapsibleSection>
       </Box>
     </Box>
   );
