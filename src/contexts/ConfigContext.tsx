@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 import { Env } from '../utils/env';
 import { ensureFreshAuthToken, forceRefreshAuthToken } from '../utils/authToken';
+import { clearResourceNameCache } from '../utils/resourceNameCache';
 
 export interface AppConfig {
   backendBaseUrl: string;
@@ -122,6 +123,7 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
               localStorage.removeItem('refresh_token');
               localStorage.removeItem('user');
               localStorage.removeItem('selectedRegions');
+              clearResourceNameCache();
               window.location.href = '/';
             }
           }

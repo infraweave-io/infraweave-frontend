@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table, TableColumn, Link } from '../../standalone/components/ComponentAdapter';
 import { Module } from '../../types/Module';
 import {
@@ -7,6 +7,7 @@ import {
   DialogContent,
   IconButton,
   Box,
+  Skeleton,
   Typography,
   ToggleButton,
   ToggleButtonGroup,
@@ -15,10 +16,27 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import { MONO_FONT } from '../../contexts/ThemeContext';
 import { shortenVersion } from '../../utils/version';
+import { readCachedNames, writeCachedNames } from '../../utils/resourceNameCache';
 
 type ResourceListProps = {
   items: Module[];
   resourceType: 'module' | 'stack';
+  /**
+   * True while further pages are still arriving. Lets the table draw rows for
+   * names it remembers from a previous visit, so the list doesn't grow under
+   * the user's cursor.
+   */
+  loading?: boolean;
+  /**
+   * True when loading stopped with pages outstanding, so `items` is incomplete.
+   * Prevents the shrunken name set from being remembered as the whole registry.
+   */
+  truncated?: boolean;
+  /**
+   * Set when the load failed. Distinguishes "empty because nothing loaded" from
+   * "empty because the registry is empty" — only the latter may evict the cache.
+   */
+  error?: Error;
   /** Optional table caption. Omit when the page heading already names the list. */
   title?: string;
   VersionsComponent: React.ComponentType<{
@@ -36,6 +54,11 @@ type ResourceRow = {
   beta_version: string;
   alpha_version: string;
   dev_version: string;
+  /**
+   * The name came from the cache and no data for it has arrived yet, so its
+   * versions are unknown — as opposed to known to be absent.
+   */
+  pending?: boolean;
 };
 
 // Rows arrive page by page and the API orders them by track before name (the
@@ -75,6 +98,9 @@ const groupResourcesByName = (modules: Module[]): ResourceRow[] => {
 export const ResourceList = ({
   items: modules,
   resourceType,
+  loading = false,
+  truncated = false,
+  error,
   title,
   VersionsComponent,
 }: ResourceListProps) => {
@@ -93,7 +119,57 @@ export const ResourceList = ({
     { title: 'Latest Dev Version', field: 'dev_version' },
   ];
 
-  const data = groupResourcesByName(modules).map((resource) => {
+  const loadedRows = useMemo(() => groupResourcesByName(modules), [modules]);
+
+  // Remember the names once the whole list has arrived, so the next visit can
+  // draw every row up front. Keyed on the name set, otherwise this writes
+  // storage on every render.
+  const loadedNameKey = loadedRows.map((row) => row.module).join(',');
+  useEffect(() => {
+    // Only a complete, successful load may be remembered. A mid-load snapshot, a
+    // failure, or a load that stopped with pages outstanding would all persist a
+    // subset — and every later visit would then start from that subset, turning a
+    // transient truncation into a permanent one.
+    // A genuinely empty registry does write `[]`: gating on the row count instead
+    // would leave deleted modules rendering as pending rows for good.
+    if (loading || truncated || error) return;
+    writeCachedNames(
+      resourceType,
+      loadedRows.map(({ module, module_name }) => ({ module, module_name })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, truncated, error, resourceType, loadedNameKey]);
+
+  // Read once per mount: re-reading as pages land would resurrect rows that the
+  // registry has since dropped.
+  const cachedNames = useMemo(() => readCachedNames(resourceType), [resourceType]);
+
+  const rows = useMemo(() => {
+    if (!loading) return loadedRows;
+
+    const loaded = new Set(loadedRows.map((row) => row.module));
+    const pending: ResourceRow[] = cachedNames
+      .filter((name) => !loaded.has(name.module))
+      .map((name) => ({
+        ...name,
+        stable_version: '',
+        beta_version: '',
+        alpha_version: '',
+        dev_version: '',
+        pending: true,
+      }));
+
+    return pending.length > 0 ? [...loadedRows, ...pending].sort(byDisplayName) : loadedRows;
+  }, [cachedNames, loadedRows, loading]);
+
+  const data = rows.map((resource) => {
+    // The API returns one record per (module, track) and these rows collapse them,
+    // so a page boundary can fall between two tracks of the same module: a row can
+    // be present and still be missing tracks. While pages are arriving no row's
+    // track set is complete, so every row is treated as unresolved, not just the
+    // ones drawn purely from the cache.
+    const tracksUnknown = resource.pending || loading;
+
     const availableTracks = [
       resource.stable_version ? 'stable' : null,
       resource.beta_version ? 'beta' : null,
@@ -124,44 +200,68 @@ export const ResourceList = ({
             </Link>
           </Box>
         </Tooltip>
+      ) : tracksUnknown ? (
+        // No version for this track *yet*: either the row came from the cache, or
+        // the page carrying this track hasn't arrived. A dash would read as "no
+        // version on this track", which isn't known until loading finishes.
+        <Skeleton variant="text" width={90} aria-label="loading version" />
       ) : (
         <Box component="span" sx={{ color: 'text.disabled' }}>
           &mdash;
         </Box>
       );
 
+    const nameButton = (
+      // A real <button>: this opens the versions dialog, so it has to be
+      // reachable by keyboard, which the previous clickable <span> was not.
+      // Disabled until the track set is known: the dialog's track switcher is
+      // built from the versions we have, and offering it before they all arrive
+      // would either hide tracks that exist or advertise tracks that don't.
+      <Box
+        component="button"
+        type="button"
+        disabled={tracksUnknown}
+        sx={{
+          background: 'none',
+          border: 0,
+          p: 0,
+          font: 'inherit',
+          fontWeight: 600,
+          color: tracksUnknown ? 'text.secondary' : 'text.primary',
+          cursor: tracksUnknown ? 'default' : 'pointer',
+          textAlign: 'left',
+          '&:hover': tracksUnknown
+            ? undefined
+            : {
+                textDecoration: 'underline',
+                color: 'primary.main',
+              },
+        }}
+        onClick={() => {
+          setSelectedResource({
+            name: resource.module,
+            displayName: resource.module_name,
+            availableTracks,
+          });
+          setSelectedTrack(availableTracks[0] || 'stable');
+        }}
+      >
+        {resource.module_name}
+      </Box>
+    );
+
     return {
-      module: (
-        // A real <button>: this opens the versions dialog, so it has to be
-        // reachable by keyboard, which the previous clickable <span> was not.
-        <Box
-          component="button"
-          type="button"
-          sx={{
-            background: 'none',
-            border: 0,
-            p: 0,
-            font: 'inherit',
-            fontWeight: 600,
-            color: 'text.primary',
-            cursor: 'pointer',
-            textAlign: 'left',
-            '&:hover': {
-              textDecoration: 'underline',
-              color: 'primary.main',
-            },
-          }}
-          onClick={() => {
-            setSelectedResource({
-              name: resource.module,
-              displayName: resource.module_name,
-              availableTracks,
-            });
-            setSelectedTrack(availableTracks[0] || 'stable');
-          }}
-        >
-          {resource.module_name}
-        </Box>
+      module: tracksUnknown ? (
+        // A `title` on a disabled control never shows — browsers suppress its mouse
+        // events — which left the greyed-out name unexplained. The span is what
+        // takes the tooltip's handlers instead.
+        <Tooltip title="Loading versions…" arrow placement="top">
+          <Box component="span" sx={{ display: 'inline-block' }}>
+            {nameButton}
+          </Box>
+        </Tooltip>
+      ) : (
+        nameButton
       ),
       stable_version: versionCell('stable', resource.stable_version),
       beta_version: versionCell('beta', resource.beta_version),

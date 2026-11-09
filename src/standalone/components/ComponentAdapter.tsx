@@ -64,6 +64,7 @@ import { MONO_FONT } from '../../contexts/ThemeContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeMode } from '../../contexts/ThemeContext';
+import { clearResourceNameCache } from '../../utils/resourceNameCache';
 
 SyntaxHighlighter.registerLanguage('yaml', yaml);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -270,6 +271,7 @@ export const StandaloneAppBar: React.FC<StandaloneAppBarProps> = ({ title }) => 
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
     localStorage.removeItem('oauth_state');
+    clearResourceNameCache();
     handleMenuClose();
     window.location.href = '/';
   };
