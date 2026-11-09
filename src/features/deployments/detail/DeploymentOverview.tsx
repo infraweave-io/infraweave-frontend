@@ -235,10 +235,10 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                   'Status Description': deployment?.error_text,
                 }),
                 ...(showDetailedInfo && {
-                  'Deployment Id': <DeploymentIdBadge value={deployment?.deployment_id} />,
+                  'Deployment Id': <DeploymentIdBadge value={deployment?.deployment_id} showFull />,
                 }),
                 ...(showDetailedInfo && {
-                  Environment: <EnvironmentBadge value={deployment?.environment} />,
+                  Environment: <EnvironmentBadge value={deployment?.environment} showFull />,
                 }),
                 ...(showDetailedInfo && {
                   'Initiated by': deployment?.initiated_by,
