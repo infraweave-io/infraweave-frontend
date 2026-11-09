@@ -8,6 +8,7 @@
  */
 
 import { decodeJwtPayload, getProvider, refreshTokens } from './oauth';
+import { clearResourceNameCache } from './resourceNameCache';
 
 const EXPIRY_SKEW_SECONDS = 60;
 
@@ -47,6 +48,7 @@ const clearAuthAndRedirect = () => {
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
   localStorage.removeItem('selectedRegions');
+  clearResourceNameCache();
   window.location.href = '/';
 };
 

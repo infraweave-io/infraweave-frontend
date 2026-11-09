@@ -8,6 +8,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { StandaloneApp } from './StandaloneApp';
+import { clearResourceNameCache } from '../utils/resourceNameCache';
 
 // Set standalone flag for components to detect environment
 (window as any).__INFRAWEAVE_STANDALONE__ = true;
@@ -31,6 +32,7 @@ async function enableMocking() {
     localStorage.removeItem('cachedProjects');
     localStorage.removeItem('selectedProjectNames');
     localStorage.removeItem('selectedRegions');
+    clearResourceNameCache();
     localStorage.setItem('__app_mode__', currentMode);
   }
 

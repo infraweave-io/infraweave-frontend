@@ -43,6 +43,9 @@ describe('Modules', () => {
   const backendBaseUrl = 'http://localhost:7007';
   // Setup mock responses before each test
   beforeEach(() => {
+    // The name cache is persistent by design, so it has to be reset between
+    // tests or one test's remembered rows show up in the next.
+    localStorage.clear();
     server.use(
       http.get(`${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`, () => {
         return HttpResponse.json(modules);
@@ -110,6 +113,122 @@ describe('Modules', () => {
     expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
     expect(await screen.findByText('EC2')).toBeInTheDocument();
     expect(requestedTokens).toEqual([null, 'page-2']);
+  });
+
+  it('remembers module names once the whole list has loaded', async () => {
+    renderModules();
+    await screen.findByText('EC2');
+
+    expect(JSON.parse(localStorage.getItem('infraweave.resource-names.v1.module')!)).toEqual([
+      { module: 'ec2', module_name: 'EC2' },
+      { module: 's3bucket', module_name: 'S3Bucket' },
+    ]);
+  });
+
+  it('draws remembered names immediately, with versions still loading', async () => {
+    localStorage.setItem(
+      'infraweave.resource-names.v1.module',
+      JSON.stringify([
+        { module: 'ec2', module_name: 'EC2' },
+        { module: 's3bucket', module_name: 'S3Bucket' },
+      ]),
+    );
+
+    // Never resolve: this pins the state *during* loading, which is the whole
+    // point of the cache.
+    server.use(
+      http.get(
+        `${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`,
+        () => new Promise(() => {}),
+      ),
+    );
+
+    renderModules();
+
+    // Both names are on screen despite no module data having arrived.
+    expect(await screen.findByText('EC2')).toBeInTheDocument();
+    expect(screen.getByText('S3Bucket')).toBeInTheDocument();
+    // Versions are not claimed to be absent — no em dashes, just skeletons.
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('loading version').length).toBe(8);
+    // ...and the names aren't clickable until their tracks are known.
+    expect(screen.getByRole('button', { name: 'EC2' })).toBeDisabled();
+  });
+
+  it('does not remember a name set that stopped short', async () => {
+    // A truncated load ends with loading: false just like a complete one, so
+    // without the `truncated` guard the shrunken set is persisted and every later
+    // visit starts from it — a transient truncation made permanent.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    localStorage.setItem(
+      'infraweave.resource-names.v1.module',
+      JSON.stringify([{ module: 'ec2', module_name: 'EC2' }]),
+    );
+
+    server.use(
+      http.get(`${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`, () =>
+        HttpResponse.json(
+          modules.filter((m) => m.module === 's3bucket'),
+          {
+            headers: { 'x-next-token': 'stuck' },
+          },
+        ),
+      ),
+    );
+
+    renderModules();
+    await screen.findByText(/This list is incomplete/);
+
+    expect(JSON.parse(localStorage.getItem('infraweave.resource-names.v1.module')!)).toEqual([
+      { module: 'ec2', module_name: 'EC2' },
+    ]);
+    (console.warn as ReturnType<typeof vi.spyOn>).mockRestore();
+  });
+
+  it('forgets names once the registry is genuinely empty', async () => {
+    // The counterpart: an empty *successful* load is authoritative. Gating the
+    // write on the row count instead would leave deleted modules rendering as
+    // pending rows on every visit, with no way back.
+    localStorage.setItem(
+      'infraweave.resource-names.v1.module',
+      JSON.stringify([{ module: 'ec2', module_name: 'EC2' }]),
+    );
+
+    server.use(
+      http.get(`${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+
+    renderModules();
+
+    await vi.waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('infraweave.resource-names.v1.module')!)).toEqual([]),
+    );
+  });
+
+  it('does not offer the versions dialog for a row whose tracks are still arriving', async () => {
+    // Records come one per (module, track), so a page boundary can split a single
+    // module's tracks. The row is on screen after page 1 but its track set is
+    // incomplete, and the dialog is built from that set.
+    server.use(
+      http.get(`${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`, ({ request }) => {
+        const nextToken = new URL(request.url).searchParams.get('next_token');
+        return nextToken
+          ? new Promise(() => {}) // hold page 2 open
+          : HttpResponse.json(
+              modules.filter((m) => m.module === 's3bucket' && m.track === 'dev'),
+              { headers: { 'x-next-token': 'page-2' } },
+            );
+      }),
+    );
+
+    renderModules();
+
+    // The row is drawn, but not clickable: its stable track may still be coming.
+    expect(await screen.findByRole('button', { name: 'S3Bucket' })).toBeDisabled();
+    // And the tracks not yet seen are not claimed to be absent.
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
   });
 
   it('keeps rows alphabetical as later pages arrive', async () => {
