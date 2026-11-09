@@ -157,6 +157,99 @@ const getInitialTrack = (pathname: string) => {
   return match ? decodeURIComponent(match[1]) : 'stable';
 };
 
+interface PageContext {
+  description: string;
+  project?: string;
+  region?: string;
+  environment?: string;
+  track?: string;
+}
+
+const parsePageContext = (pathname: string): PageContext => {
+  const d = (s: string) => decodeURIComponent(s);
+
+  const deployment = pathname.match(
+    /^\/infraweave\/deployment\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/,
+  );
+  if (deployment) {
+    const [, project, region, environment, deploymentId, tab] = deployment;
+    return {
+      description: `Viewing deployment '${d(deploymentId)}' in project '${d(project)}', region '${d(
+        region,
+      )}', environment '${d(environment)}'${tab ? ` (${d(tab)} tab)` : ''}`,
+      project: d(project),
+      region: d(region),
+      environment: d(environment),
+    };
+  }
+
+  const module = pathname.match(/^\/infraweave\/module\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (module) {
+    const [, track, moduleName, moduleVersion] = module;
+    return {
+      description: `Viewing module '${d(moduleName)}' version '${d(moduleVersion)}' on track '${d(
+        track,
+      )}'`,
+      track: d(track),
+    };
+  }
+
+  const stack = pathname.match(/^\/infraweave\/stack\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (stack) {
+    const [, track, stackName, stackVersion] = stack;
+    return {
+      description: `Viewing stack '${d(stackName)}' version '${d(stackVersion)}' on track '${d(
+        track,
+      )}'`,
+      track: d(track),
+    };
+  }
+
+  const provider = pathname.match(/^\/infraweave\/provider\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (provider) {
+    const [, track, providerName, providerVersion] = provider;
+    return {
+      description: `Viewing provider '${d(providerName)}' version '${d(
+        providerVersion,
+      )}' on track '${d(track)}'`,
+      track: d(track),
+    };
+  }
+
+  const policy = pathname.match(/^\/infraweave\/policy\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (policy) {
+    const [, environment, policyName, policyVersion] = policy;
+    return {
+      description: `Viewing policy '${d(policyName)}' version '${d(
+        policyVersion,
+      )}' in environment '${d(environment)}'`,
+      environment: d(environment),
+    };
+  }
+
+  const tabNames: Record<string, string> = {
+    overview: 'Overview',
+    deployments: 'Deployments',
+    stacks: 'Stacks',
+    modules: 'Modules',
+    providers: 'Providers',
+    policies: 'Policies',
+    projects: 'Projects',
+  };
+
+  const tab = pathname.match(/^\/infraweave\/([^/]+)$/);
+  if (tab && tabNames[tab[1]]) {
+    return { description: `Viewing the ${tabNames[tab[1]]} list` };
+  }
+
+  const observability = pathname.match(/^\/infraweave\/observability\/([^/]+)$/);
+  if (observability) {
+    return { description: `Viewing Observability (${d(observability[1])} view)` };
+  }
+
+  return { description: 'Viewing the InfraWeave dashboard' };
+};
+
 const splitThinking = (content: string) => {
   const thinking: string[] = [];
   let answer = '';
@@ -204,14 +297,25 @@ const buildChatHistory = (messages: ChatMessage[]) =>
           : message.content,
     }));
 
-const buildContextualMessage = (message: string, history: ReturnType<typeof buildChatHistory>) => {
-  if (!history.length) return message;
+const buildContextualMessage = (
+  message: string,
+  history: ReturnType<typeof buildChatHistory>,
+  pageContext: PageContext,
+) => {
+  const parts: string[] = [];
 
-  const transcript = history
-    .map(({ role, content }) => `${role === 'user' ? 'User' : 'Assistant'}: ${content}`)
-    .join('\n\n');
+  parts.push(`The user is currently: ${pageContext.description}.`);
 
-  return `Use this previous conversation for context:\n\n${transcript}\n\nCurrent user message: ${message}`;
+  if (history.length) {
+    const transcript = history
+      .map(({ role, content }) => `${role === 'user' ? 'User' : 'Assistant'}: ${content}`)
+      .join('\n\n');
+    parts.push(`Previous conversation:\n\n${transcript}`);
+  }
+
+  parts.push(`Current user message: ${message}`);
+
+  return parts.join('\n\n');
 };
 
 export const AiAssistantOverlay: React.FC = () => {
@@ -343,20 +447,28 @@ export const AiAssistantOverlay: React.FC = () => {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    const chatApiUrl = config.getApiUrl('api/proxy/api/infraweave/api/v1/chat');
+    const pageContext = parsePageContext(location.pathname);
 
     try {
-      const response = await config.fetch(chatApiUrl, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await config.fetch(
+        config.getApiUrl('api/proxy/api/infraweave/api/v1/chat'),
+        {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: buildContextualMessage(trimmed, history, pageContext),
+            ...(pageContext.track || track.trim()
+              ? { track: pageContext.track || track.trim() }
+              : {}),
+            ...(pageContext.project ? { project: pageContext.project } : {}),
+            ...(pageContext.region ? { region: pageContext.region } : {}),
+            ...(pageContext.environment ? { environment: pageContext.environment } : {}),
+          }),
         },
-        body: JSON.stringify({
-          message: buildContextualMessage(trimmed, history),
-          ...(track.trim() ? { track: track.trim() } : {}),
-        }),
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`Chat request failed with ${response.status}`);
