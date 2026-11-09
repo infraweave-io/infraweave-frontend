@@ -817,6 +817,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        disableEnforceFocus
         sx={{ zIndex: (theme) => theme.zIndex.modal + 2 }}
       >
         <DrawerContent

@@ -68,6 +68,7 @@ export const ReadLogsButton = (
         anchor="right"
         open={isOpen}
         onClose={() => toggleDrawer(false)}
+        disableEnforceFocus
         sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
       >
         <DrawerContent

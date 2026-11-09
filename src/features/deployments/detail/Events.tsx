@@ -661,6 +661,7 @@ const ChangeRecordActions = ({
         anchor="right"
         open={open}
         onClose={() => setOpen(false)}
+        disableEnforceFocus
         sx={{ zIndex: (theme: any) => theme.zIndex.modal + 1 }}
       >
         <DrawerContent
