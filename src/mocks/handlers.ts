@@ -3,6 +3,7 @@ import { modules } from './modules';
 import { projects } from './projects';
 import { policies } from './policies';
 import { stacks } from './stacks';
+import { changeRecordsOfType, findChangeRecord } from './changeRecords';
 import { providers } from './providers';
 import {
   deployments_123808927999_eu_central_1,
@@ -147,6 +148,27 @@ export const handlers = [
         initiated_by: 'user@example.com',
       },
     ]),
+  ),
+
+  // ============= CHANGE RECORDS =============
+  http.get(
+    `${backendBaseUrl}/api/v1/change_records/:project/:region/:environment/:deploymentId`,
+    ({ params, request }) =>
+      HttpResponse.json(
+        changeRecordsOfType(new URL(request.url).searchParams.get('change_type')).map((r) => ({
+          ...r,
+          deployment_id: String(params.deploymentId),
+        })),
+      ),
+  ),
+  http.get(
+    `${backendBaseUrl}/api/v1/change_record/:project/:region/:environment/:deploymentId/:jobId/:changeType`,
+    ({ params }) => {
+      const found = findChangeRecord(String(params.jobId));
+      return found
+        ? HttpResponse.json({ ...found, deployment_id: String(params.deploymentId) })
+        : new HttpResponse(null, { status: 404 });
+    },
   ),
 
   // ============= MODULES =============
