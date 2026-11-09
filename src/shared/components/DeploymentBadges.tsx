@@ -6,16 +6,20 @@ import Box from '@mui/material/Box';
 interface BadgeProps {
   value?: string;
   showPrefix?: boolean;
+  // Show the full value instead of only the last path segment
+  showFull?: boolean;
 }
 
 const CopyableChip = ({
   label,
   value,
   color,
+  fullWidth = false,
 }: {
   label: React.ReactNode;
   value: string;
   color: 'primary' | 'secondary';
+  fullWidth?: boolean;
 }) => {
   const [tooltip, setTooltip] = useState(value);
 
@@ -43,7 +47,7 @@ const CopyableChip = ({
         color={color}
         onClick={handleCopy}
         sx={{
-          maxWidth: '250px',
+          maxWidth: fullWidth ? '100%' : '250px',
           fontFamily: 'monospace',
           cursor: 'pointer',
         }}
@@ -52,9 +56,9 @@ const CopyableChip = ({
   );
 };
 
-export const DeploymentIdBadge = ({ value, showPrefix = false }: BadgeProps) => {
+export const DeploymentIdBadge = ({ value, showPrefix = false, showFull = false }: BadgeProps) => {
   if (!value) return null;
-  const displayValue = value.split('/').pop() || value;
+  const displayValue = showFull ? value : value.split('/').pop() || value;
 
   const label = showPrefix ? (
     <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
@@ -69,12 +73,12 @@ export const DeploymentIdBadge = ({ value, showPrefix = false }: BadgeProps) => 
     displayValue
   );
 
-  return <CopyableChip label={label} value={value} color="secondary" />;
+  return <CopyableChip label={label} value={value} color="secondary" fullWidth={showFull} />;
 };
 
-export const EnvironmentBadge = ({ value, showPrefix = false }: BadgeProps) => {
+export const EnvironmentBadge = ({ value, showPrefix = false, showFull = false }: BadgeProps) => {
   if (!value) return null;
-  const displayValue = value.split('/').pop() || value;
+  const displayValue = showFull ? value : value.split('/').pop() || value;
 
   const label = showPrefix ? (
     <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
@@ -89,5 +93,5 @@ export const EnvironmentBadge = ({ value, showPrefix = false }: BadgeProps) => {
     displayValue
   );
 
-  return <CopyableChip label={label} value={value} color="primary" />;
+  return <CopyableChip label={label} value={value} color="primary" fullWidth={showFull} />;
 };
