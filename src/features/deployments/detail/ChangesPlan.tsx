@@ -154,8 +154,10 @@ const ResourceChangesTable = ({ changes }: { changes: ResourceChange[] }) => {
 
   return (
     <Box>
-      <Box display="flex" alignItems="center" gap={1} mb={1}>
+      <Box display="flex" alignItems="center" gap={1} mb={1} pt={1}>
         <FormControlLabel
+          // MUI gives the label a -11px left margin. The drawer body has overflow: auto, so it clips the checkbox.
+          sx={{ ml: 1 }}
           control={
             <Checkbox
               checked={hideTagOnlyChanges}
