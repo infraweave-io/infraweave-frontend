@@ -1,0 +1,68 @@
+name: Deploy PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# One deploy per PR at a time; newer pushes cancel in-flight preview builds.
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write # for AWS OIDC
+  contents: read
+  pull-requests: write # to post the preview comment
+
+jobs:
+  deploy-preview:
+    name: Build mock preview and publish
+    runs-on: ubuntu-latest
+    # OIDC federation is unavailable to fork PRs, so skip them (nothing to deploy to).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build mock preview
+        # Mock mode: MSW intercepts all API calls and auth is disabled, so the
+        # preview is fully self-contained — no backend, Cognito, or CORS needed.
+        run: npx vite build --mode mock --base=/pr-${PR_NUMBER}/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PREVIEW_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.PREVIEW_AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync build/ "s3://${{ vars.PREVIEW_S3_BUCKET }}/pr-${PR_NUMBER}/" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.PREVIEW_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/pr-${PR_NUMBER}/*"
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview
+          message: |
+            ### 🚀 Preview deployed
+
+            **${{ vars.PREVIEW_BASE_URL }}/pr-${{ github.event.number }}/**
+
+            Built in mock mode (MSW-backed, auth disabled) from ${{ github.event.pull_request.head.sha }}.
+            Updates on every push to this PR; removed when the PR closes.
