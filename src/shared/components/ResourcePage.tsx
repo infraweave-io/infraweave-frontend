@@ -12,7 +12,7 @@ import {
   HeaderTabs,
 } from '../../standalone/components/ComponentAdapter';
 import { Module } from '../../types/Module';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useAsync } from '../../hooks/useAsync';
 
 export interface ResourcePageProps {
@@ -84,6 +84,21 @@ export const ResourcePage: React.FC<ResourcePageProps> = ({
   } else if (error) {
     if (hideContent) return null;
     return <ResponseErrorPanel error={error} />;
+  }
+
+  // The API serves modules and stacks from the same lookup, so a stack also loads under
+  // /module/ and vice versa. Send the viewer to the route that matches the record's type.
+  const actualType = value?.module_type;
+  if ((actualType === 'module' || actualType === 'stack') && actualType !== resourceType) {
+    if (hideContent) return null;
+    return (
+      <Navigate
+        replace
+        to={`/infraweave/${actualType}/${track}/${encodeURIComponent(
+          resourceName ?? '',
+        )}/${encodeURIComponent(resourceVersionParam ?? '')}`}
+      />
+    );
   }
 
   const displayName = value?.module_name ?? resourceName;
