@@ -7,10 +7,17 @@ import { LoadingMore } from '../../../shared/components/LoadingMore';
 import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { ModuleVersions } from '../detail/ModuleVersions';
 import { readCachedNames } from '../../../utils/resourceNameCache';
+import { useSelectedProviders } from '../../root/RootPage/SelectedProvidersContext';
 
 export const Modules = () => {
+  const { selectedProviders } = useSelectedProviders();
+  const noCloudSelected = selectedProviders.length === 0;
+  // No cloud selected means nothing to show, so skip the request entirely
+  // rather than fetching a list we are about to discard.
   const { items, loading, truncated, error } = usePaginatedItems<Module>(
-    'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
+    noCloudSelected
+      ? null
+      : 'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
     'modules',
   );
 
@@ -35,7 +42,9 @@ export const Modules = () => {
         loading={loading}
         truncated={truncated}
         error={error}
+        requestSkipped={noCloudSelected}
         resourceType="module"
+        emptyContent={noCloudSelected ? 'Select a cloud to browse modules.' : 'No modules found.'}
         VersionsComponent={ModuleVersions}
       />
       {loading && <LoadingMore />}

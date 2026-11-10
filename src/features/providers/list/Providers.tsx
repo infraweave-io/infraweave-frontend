@@ -5,15 +5,22 @@ import { Provider } from '../../../types/Provider';
 import { Table, TableColumn, Link } from '../../../standalone/components/ComponentAdapter';
 import { LoadingMore } from '../../../shared/components/LoadingMore';
 import { ListIncomplete } from '../../../shared/components/ListIncomplete';
+import { useSelectedProviders } from '../../root/RootPage/SelectedProvidersContext';
 import { Box } from '@mui/material';
 
 export const Providers = () => {
+  const { selectedProviders } = useSelectedProviders();
+  // No cloud selected means nothing to show, so skip the request entirely
+  // rather than fetching a list we are about to discard.
   const {
     items: value,
     loading,
     truncated,
     error,
-  } = usePaginatedItems<Provider>('api/proxy/api/infraweave/api/v1/providers', 'providers');
+  } = usePaginatedItems<Provider>(
+    selectedProviders.length > 0 ? 'api/proxy/api/infraweave/api/v1/providers' : null,
+    'providers',
+  );
 
   // Only take over the whole view when there is nothing to show. A failure on a
   // later page keeps the pages already loaded, with the error beside them.
@@ -87,7 +94,16 @@ export const Providers = () => {
 
   return (
     <>
-      <Table options={{ search: true, paging: true, pageSize: 10 }} columns={columns} data={data} />
+      <Table
+        options={{ search: true, paging: true, pageSize: 10 }}
+        columns={columns}
+        data={data}
+        emptyContent={
+          selectedProviders.length === 0
+            ? 'Select a cloud to browse providers.'
+            : 'No providers found.'
+        }
+      />
       {loading && <LoadingMore />}
       {truncated && <ListIncomplete label="providers" />}
       {error && <ResponseErrorPanel error={error} />}

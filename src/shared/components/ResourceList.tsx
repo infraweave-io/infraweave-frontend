@@ -37,8 +37,16 @@ type ResourceListProps = {
    * "empty because the registry is empty" — only the latter may evict the cache.
    */
   error?: Error;
+  /**
+   * True when no request was made at all, e.g. no cloud is selected. The empty
+   * list then says nothing about the registry, so it must not evict the cache
+   * either.
+   */
+  requestSkipped?: boolean;
   /** Optional table caption. Omit when the page heading already names the list. */
   title?: string;
+  /** Shown instead of an empty table body, e.g. when no cloud is selected. */
+  emptyContent?: React.ReactNode;
   VersionsComponent: React.ComponentType<{
     module?: string;
     track?: string;
@@ -101,7 +109,9 @@ export const ResourceList = ({
   loading = false,
   truncated = false,
   error,
+  requestSkipped = false,
   title,
+  emptyContent,
   VersionsComponent,
 }: ResourceListProps) => {
   const [selectedResource, setSelectedResource] = useState<{
@@ -131,14 +141,15 @@ export const ResourceList = ({
     // subset — and every later visit would then start from that subset, turning a
     // transient truncation into a permanent one.
     // A genuinely empty registry does write `[]`: gating on the row count instead
-    // would leave deleted modules rendering as pending rows for good.
-    if (loading || truncated || error) return;
+    // would leave deleted modules rendering as pending rows for good. A list that
+    // was never requested is not that, so it is excluded too.
+    if (loading || truncated || error || requestSkipped) return;
     writeCachedNames(
       resourceType,
       loadedRows.map(({ module, module_name }) => ({ module, module_name })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, truncated, error, resourceType, loadedNameKey]);
+  }, [loading, truncated, error, requestSkipped, resourceType, loadedNameKey]);
 
   // Read once per mount: re-reading as pages land would resurrect rows that the
   // registry has since dropped.
@@ -274,6 +285,7 @@ export const ResourceList = ({
     <>
       <Table
         title={title}
+        emptyContent={emptyContent}
         options={{
           search: true,
           paging: false,
