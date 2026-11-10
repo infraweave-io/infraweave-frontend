@@ -15,6 +15,7 @@ import {
 } from '../../../standalone/components/ComponentAdapter';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AllChangeRecords } from './Events';
+import { JobDrawer } from './jobDrawer';
 import { DeploymentOverview } from './DeploymentOverview';
 
 const tabs = [
@@ -138,6 +139,7 @@ export const DeploymentPage = () => {
           </Grid>
         </Grid>
       </Content>
+      <JobDrawer deployment={value} />
     </Page>
   );
 };
