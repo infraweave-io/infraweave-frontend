@@ -139,7 +139,7 @@ export const DenseTable = ({
     const encodedModuleName = encodeURIComponent(mod.module ?? '');
     const encodedModuleVersion = encodeURIComponent(mod.version ?? '');
 
-    const module_link = `/infraweave/module/${track}/${encodedModuleName}/${encodedModuleVersion}`;
+    const module_link = `/infraweave/${resourceType}/${track}/${encodedModuleName}/${encodedModuleVersion}`;
     const moduleData: any = {
       module: `${mod.module_name || mod.module}`,
       version: (

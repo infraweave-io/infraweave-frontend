@@ -701,7 +701,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
                           deployment.module_version &&
                           deployment.module_version !== 'N/A' ? (
                             <Link
-                              to={`/infraweave/module/${
+                              to={`/infraweave/${deployment.module_type || 'module'}/${
                                 deployment.module_track || 'stable'
                               }/${encodeURIComponent(deployment.module)}/${encodeURIComponent(
                                 deployment.module_version,
