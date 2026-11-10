@@ -227,9 +227,11 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                   }),
                 ...(showDetailedInfo &&
                   deployment?.drift_detection?.enabled && {
-                    'Auto-remediate drift': deployment?.drift_detection.auto_remediate
-                      ? 'Yes'
-                      : 'No',
+                    'Auto-remediate drift':
+                      deployment.drift_detection.autoRemediate ??
+                      deployment.drift_detection.auto_remediate
+                        ? 'Yes'
+                        : 'No',
                   }),
                 ...(showDetailedInfo && {
                   'Status Description': deployment?.error_text,

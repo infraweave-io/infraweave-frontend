@@ -30,7 +30,9 @@ export type Deployment = {
   drift_detection: {
     enabled: boolean;
     interval: string;
-    auto_remediate: boolean;
+    // TODO: The API currently sends `autoRemediate`; accept `auto_remediate` too in case it moves to snake_case
+    autoRemediate?: boolean;
+    auto_remediate?: boolean;
   };
   next_drift_check_epoch: number;
   initiated_by: string;
