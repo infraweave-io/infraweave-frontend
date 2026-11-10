@@ -40,8 +40,8 @@ import { ChangeRecord, ResourceChange } from '../../../types/Log';
 import { Deployment } from '../../../types/Deployment';
 import { Module } from '../../../types/Module';
 import { Event } from '../../../types/Event';
-import { DrawerContent } from './ReadLogsButton';
-import { Drawer } from '@mui/material';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { JobView, jobDrawerSearch } from './jobDrawer';
 import { CompareVersionsDialog } from '../../modules/detail/CompareVersionsDialog';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
@@ -535,40 +535,19 @@ const ChangeSummary = ({
 const ChangeRecordActions = ({
   jobId,
   changeType,
-  deploymentId,
-  deployment,
   jobStatus,
   summary,
 }: {
   jobId: string;
   changeType?: string;
-  deploymentId?: string;
-  deployment?: Deployment;
   jobStatus?: string;
   summary?: { create: number; update: number; delete: number; replace: number };
 }) => {
-  const [open, setOpen] = useState(false);
-  const [viewLogs, setViewLogs] = useState(false);
-
-  const event: Event = {
-    deployment_id: deploymentId ?? deployment?.deployment_id ?? '',
-    status: jobStatus ?? '',
-    event: (changeType ?? '').toLowerCase(),
-    module: deployment?.module ?? '',
-    job_id: jobId,
-    initiated_by: '',
-    timestamp: '',
-    epoch: 0,
-  };
-
-  const openChanges = () => {
-    setViewLogs(false);
-    setOpen(true);
-  };
-  const openLogs = () => {
-    setViewLogs(true);
-    setOpen(true);
-  };
+  const [params] = useSearchParams();
+  const linkTo = (view: JobView) => ({
+    search: jobDrawerSearch(params, { jobId, view, changeType }),
+  });
+  const linkState = { jobStatus };
 
   const hasAnyChange = summary
     ? summary.create + summary.update + summary.delete + summary.replace > 0
@@ -578,9 +557,11 @@ const ChangeRecordActions = ({
     <>
       <Box display="flex" alignItems="center" justifyContent="flex-end" gap={1} flexWrap="wrap">
         <Button
+          component={RouterLink}
+          to={linkTo('logs')}
+          state={linkState}
           variant="text"
           size="small"
-          onClick={openLogs}
           startIcon={<ArticleOutlinedIcon sx={{ fontSize: 14 }} />}
           sx={{
             textTransform: 'none',
@@ -602,9 +583,11 @@ const ChangeRecordActions = ({
         </Button>
         {summary !== undefined && (
           <Button
+            component={RouterLink}
+            to={linkTo('changes')}
+            state={linkState}
             variant="outlined"
             color="primary"
-            onClick={openChanges}
             endIcon={<ChevronRightIcon sx={{ fontSize: 18 }} />}
             sx={{
               textTransform: 'none',
@@ -646,32 +629,6 @@ const ChangeRecordActions = ({
           </Button>
         )}
       </Box>
-      <Drawer
-        PaperProps={{
-          sx: {
-            width: '70%',
-            display: 'flex',
-            flexDirection: 'column',
-            p: 2.5,
-            pt: 10,
-            height: '100vh',
-            overflow: 'hidden',
-          },
-        }}
-        anchor="right"
-        open={open}
-        onClose={() => setOpen(false)}
-        disableEnforceFocus
-        sx={{ zIndex: (theme: any) => theme.zIndex.modal + 1 }}
-      >
-        <DrawerContent
-          toggleDrawer={setOpen}
-          event={event}
-          deployment={deployment}
-          viewLogs={viewLogs}
-          jobStatus={jobStatus}
-        />
-      </Drawer>
     </>
   );
 };
@@ -765,8 +722,6 @@ const renderChangeRecordRow = (cr: ChangeRecord, deployment?: Deployment) => {
       <ChangeRecordActions
         jobId={jobId}
         changeType={cr.change_type}
-        deploymentId={cr.deployment_id}
-        deployment={deployment}
         jobStatus={cr.status ?? 'successful'}
         summary={summary}
       />
