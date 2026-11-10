@@ -65,11 +65,11 @@ describe('Modules', () => {
     server.resetHandlers();
   });
 
-  const renderModules = () =>
+  const renderModules = (initialProviders: string[] = ['AWS']) =>
     render(
       <MemoryRouter>
         <ConfigProvider backendBaseUrl="http://localhost:7007" isStandalone={false}>
-          <SelectedProvidersProvider initialProviders={['AWS']}>
+          <SelectedProvidersProvider initialProviders={initialProviders}>
             <SelectedProjectProvider>
               <Modules />
             </SelectedProjectProvider>
@@ -113,6 +113,61 @@ describe('Modules', () => {
     expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
     expect(await screen.findByText('EC2')).toBeInTheDocument();
     expect(requestedTokens).toEqual([null, 'page-2']);
+  });
+
+  it('shows nothing and issues no request when no cloud is selected', async () => {
+    const requests: string[] = [];
+    server.events.on('request:start', ({ request }) => requests.push(request.url));
+
+    renderModules([]);
+
+    expect(await screen.findByText('Select a cloud to browse modules.')).toBeInTheDocument();
+    expect(screen.queryByText('S3Bucket')).not.toBeInTheDocument();
+    expect(requests.filter((url) => url.includes('/api/v1/modules'))).toEqual([]);
+
+    server.events.removeAllListeners('request:start');
+  });
+
+  // Rendered without `initialProviders` so the context falls back to what it
+  // reads from localStorage, which is the path a real visit takes.
+  const renderModulesWithStoredSelection = () =>
+    render(
+      <MemoryRouter>
+        <ConfigProvider backendBaseUrl="http://localhost:7007" isStandalone={false}>
+          <SelectedProvidersProvider>
+            <SelectedProjectProvider>
+              <Modules />
+            </SelectedProjectProvider>
+          </SelectedProvidersProvider>
+        </ConfigProvider>
+      </MemoryRouter>,
+    );
+
+  it('starts with every cloud ticked when none has been chosen yet', async () => {
+    // Otherwise gating turns a first visit into an empty table.
+    expect(localStorage.getItem('selectedProviders')).toBeNull();
+
+    renderModulesWithStoredSelection();
+
+    expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
+  });
+
+  it('starts with every cloud ticked when the stored selection is empty', async () => {
+    // The upgrade path: the previous version persisted `[]` for anyone who never
+    // ticked a box, and honouring that literally would blank their list out.
+    localStorage.setItem('selectedProviders', JSON.stringify([]));
+
+    renderModulesWithStoredSelection();
+
+    expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
+  });
+
+  it('honours a stored selection that still names an offered cloud', async () => {
+    localStorage.setItem('selectedProviders', JSON.stringify(['AWS']));
+
+    renderModulesWithStoredSelection();
+
+    expect(await screen.findByText('S3Bucket')).toBeInTheDocument();
   });
 
   it('remembers module names once the whole list has loaded', async () => {
