@@ -1,0 +1,101 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Serialize the whole pipeline; do not cancel an in-flight rollout.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # for AWS OIDC
+  contents: read
+
+jobs:
+  deploy-staging:
+    name: Build and deploy to staging
+    runs-on: ubuntu-latest
+    # Resolves the staging-scoped vars.* (AWS role, bucket, distribution, region).
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build staging bundle
+        # Backend config comes from the committed .env.staging (public values —
+        # API Gateway URL, Cognito domain + clientId; the app holds no secrets).
+        run: npx vite build --mode staging --base=/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sync to S3
+        # --exclude "pr-*/*" is CRITICAL: staging shares the bucket with PR
+        # previews (under pr-<N>/), so without it --delete would wipe them.
+        run: |
+          aws s3 sync build/ "s3://${{ vars.S3_BUCKET }}/" \
+            --delete \
+            --exclude "pr-*/*"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
+
+  deploy-production:
+    name: Build and deploy to production
+    runs-on: ubuntu-latest
+    # Runs only after staging succeeds. The production environment carries a
+    # required-reviewer protection rule, so this job pauses for manual approval
+    # ("Review deployments" button) before it starts.
+    needs: deploy-staging
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        # Backend config comes from the committed .env.production (public values —
+        # API Gateway URL, Cognito domain + clientId; the app holds no secrets).
+        run: npx vite build --mode production --base=/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sync to S3
+        run: |
+          aws s3 sync build/ "s3://${{ vars.S3_BUCKET }}/" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
