@@ -1,4 +1,4 @@
-import React, { ReactNode, useState, useEffect } from 'react';
+import React, { ReactNode, useState, useEffect, useDeferredValue } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -65,6 +65,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeMode } from '../../contexts/ThemeContext';
 import { clearResourceNameCache } from '../../utils/resourceNameCache';
+import { useDebounce } from '../../hooks/useDebounce';
 
 SyntaxHighlighter.registerLanguage('yaml', yaml);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -1137,6 +1138,10 @@ export interface LogViewerProps {
 export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
   const { mode } = useThemeMode();
   const [searchTerm, setSearchTerm] = React.useState('');
+  const debouncedTerm = useDebounce(searchTerm, 250);
+  const deferredTerm = useDeferredValue(debouncedTerm);
+  const isSearching = searchTerm !== deferredTerm;
+  const isSearchActive = deferredTerm.length >= 2;
   const [filterMode, setFilterMode] = React.useState(true);
   const [currentMatchIndex, setCurrentMatchIndex] = React.useState(0);
   const [wordWrap, setWordWrap] = React.useState(false);
@@ -1152,7 +1157,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
   };
 
   const { displayText, matchCount } = React.useMemo(() => {
-    if (!searchTerm) return { displayText: text, matchCount: 0 };
+    if (deferredTerm.length <= 1) return { displayText: text, matchCount: 0 };
+    if (!deferredTerm) return { displayText: text, matchCount: 0 };
 
     const lines = text.split('\n');
 
@@ -1160,10 +1166,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
       // Filter mode: only show matching lines with highlights
       let count = 0;
       const filtered = lines
-        .filter((line) => line.toLowerCase().includes(searchTerm.toLowerCase()))
+        .filter((line) => line.toLowerCase().includes(deferredTerm.toLowerCase()))
         .map((line) => {
           const lowerLine = line.toLowerCase();
-          const lowerSearch = searchTerm.toLowerCase();
+          const lowerSearch = deferredTerm.toLowerCase();
 
           let result = '';
           let lastIndex = 0;
@@ -1173,10 +1179,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
             result += line.substring(lastIndex, index);
             result += `__HIGHLIGHT_START_${count}__${line.substring(
               index,
-              index + searchTerm.length,
+              index + deferredTerm.length,
             )}__HIGHLIGHT_END__`;
             count++;
-            lastIndex = index + searchTerm.length;
+            lastIndex = index + deferredTerm.length;
             index = lowerLine.indexOf(lowerSearch, lastIndex);
           }
           result += line.substring(lastIndex);
@@ -1189,7 +1195,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
     let count = 0;
     const highlighted = lines.map((line) => {
       const lowerLine = line.toLowerCase();
-      const lowerSearch = searchTerm.toLowerCase();
+      const lowerSearch = deferredTerm.toLowerCase();
 
       if (lowerLine.includes(lowerSearch)) {
         let result = '';
@@ -1200,10 +1206,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
           result += line.substring(lastIndex, index);
           result += `__HIGHLIGHT_START_${count}__${line.substring(
             index,
-            index + searchTerm.length,
+            index + deferredTerm.length,
           )}__HIGHLIGHT_END__`;
           count++;
-          lastIndex = index + searchTerm.length;
+          lastIndex = index + deferredTerm.length;
           index = lowerLine.indexOf(lowerSearch, lastIndex);
         }
         result += line.substring(lastIndex);
@@ -1213,13 +1219,13 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
     });
 
     return { displayText: highlighted.join('\n'), matchCount: count };
-  }, [text, searchTerm, filterMode]);
+  }, [text, deferredTerm, filterMode]);
 
   // Reset match index when search term or mode changes
   React.useEffect(() => {
     setCurrentMatchIndex(0);
     matchRefs.current = [];
-  }, [searchTerm, filterMode]);
+  }, [deferredTerm, filterMode]);
 
   // Scroll to current match
   React.useEffect(() => {
@@ -1235,13 +1241,13 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
   React.useEffect(() => {
     // Only scroll if we are not searching/filtering
     // And if the user was previously at the bottom
-    if (paperRef.current && !searchTerm && isAtBottom.current) {
+    if (paperRef.current && !isSearchActive && isAtBottom.current) {
       paperRef.current.scrollTo({
         top: paperRef.current.scrollHeight,
         behavior: 'smooth',
       });
     }
-  }, [text, displayText, searchTerm]);
+  }, [text, displayText, isSearchActive]);
 
   const goToNextMatch = () => {
     if (matchCount > 0) {
@@ -1255,10 +1261,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
     }
   };
 
-  const renderHighlightedText = (text: string) => {
-    if (!searchTerm) return text;
+  const renderedText = React.useMemo(() => {
+    if (!deferredTerm) return displayText;
 
-    const parts = text.split(/(__HIGHLIGHT_START_\d+__|__HIGHLIGHT_END__)/);
+    const parts = displayText.split(/(__HIGHLIGHT_START_\d+__|__HIGHLIGHT_END__)/);
 
     return parts.map((part, index) => {
       const highlightMatch = part.match(/__HIGHLIGHT_START_(\d+)__/);
@@ -1295,7 +1301,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
       }
       return part;
     });
-  };
+  }, [displayText, deferredTerm, currentMatchIndex]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', pt: 2, px: 2 }}>
@@ -1308,7 +1314,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
           onChange={(e) => setSearchTerm(e.target.value)}
           sx={{ flex: '1 1 200px', minWidth: '200px' }}
           InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} fontSize="small" />,
+            startAdornment: isSearching ? (
+              <CircularProgress size={16} thickness={5} sx={{ mr: 1, color: 'action.active' }} />
+            ) : (
+              <SearchIcon sx={{ mr: 1, color: 'action.active' }} fontSize="small" />
+            ),
             endAdornment: searchTerm && (
               <IconButton
                 size="small"
@@ -1321,7 +1331,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
             ),
           }}
         />
-        {searchTerm && (
+        {isSearchActive && (
           <>
             <Button
               size="small"
@@ -1369,6 +1379,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
           <WrapTextIcon />
         </IconButton>
       </Box>
+      {deferredTerm.length === 1 && (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, mt: -1 }}>
+          Please search for two or more characters...
+        </Typography>
+      )}
       <Paper
         ref={paperRef}
         onScroll={handleScroll}
@@ -1410,7 +1425,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
               overflowX: wordWrap ? 'visible' : 'auto',
             }}
           >
-            {searchTerm ? renderHighlightedText(displayText) : displayText || text}
+            {deferredTerm ? renderedText : displayText || text}
           </pre>
         )}
       </Paper>
