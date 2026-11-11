@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useConfig } from '../../../hooks/useConfig';
+import React from 'react';
+import { useSelectedProjects } from './SelectedProjectsContext';
 import {
   Table,
   TableColumn,
@@ -13,9 +13,10 @@ import { useSelectedProviders } from './SelectedProvidersContext';
 
 type DenseTableProps = {
   projects: Project[];
+  emptyContent?: React.ReactNode;
 };
 
-export const DenseTable = ({ projects }: DenseTableProps) => {
+export const DenseTable = ({ projects, emptyContent }: DenseTableProps) => {
   const columns: TableColumn[] = [
     { title: 'Project', field: 'project', width: '200px' },
     { title: 'Description', field: 'description' },
@@ -46,65 +47,41 @@ export const DenseTable = ({ projects }: DenseTableProps) => {
       }}
       columns={columns}
       data={data}
+      emptyContent={emptyContent}
     />
   );
 };
 
 export const Projects = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const { selectedProviders } = useSelectedProviders();
+  // Shares the context's cached list — seeded from storage so the table is drawn
+  // immediately, and refetched only once that copy has gone stale. Fetching here
+  // as well would have meant two requests for the same list on this tab.
+  //
+  // This replaces a 60s polling interval: the list is now refreshed when the tab
+  // is opened or returned to with a stale cache, rather than on a timer while it
+  // sits unwatched.
+  const { projects, loadingProjects: loading, projectsError: error } = useSelectedProjects();
+  const cloudSelected = selectedProviders.length > 0;
 
-  // Function to fetch projects for each selected provider in parallel
-  const config = useConfig();
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchPromises = selectedProviders.map((_provider) => {
-        const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/projects');
-        return config.fetch(url).then((response) => {
-          if (response.status >= 300 && response.status < 400) {
-            throw new Error('Redirected to login or guest page');
-          }
-          return response.json();
-        });
-      });
-
-      // Wait for all fetch requests to complete
-      const results = await Promise.all(fetchPromises);
-
-      // Merge all results into a single array
-      const allProjects = results.flat();
-
-      setProjects(allProjects);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch projects on initial render and whenever selectedProviders change
-  useEffect(() => {
-    if (selectedProviders.length > 0) {
-      fetchProjects();
-      const intervalId = setInterval(fetchProjects, 60000); // Refresh every 60 seconds
-      return () => clearInterval(intervalId);
-    }
-    // Clear projects when no providers are selected
-    setProjects([]);
-    setLoading(false);
-    return () => {};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProviders]);
-
-  if (loading) {
+  if (loading && cloudSelected) {
     return <Progress />;
-  } else if (error) {
+  } else if (error && projects.length === 0 && cloudSelected) {
+    // Only surfaced when there is nothing to show: a failed background refresh
+    // over a warm cache must not replace a working table with an error. Gated on
+    // the cloud filter like the spinner above it, so with no cloud selected the
+    // table keeps saying so instead of reporting a fetch the user never saw.
     return <ResponseErrorPanel error={error} />;
   }
 
-  return <DenseTable projects={projects} />;
+  return (
+    <DenseTable
+      projects={cloudSelected ? projects : []}
+      emptyContent={
+        cloudSelected
+          ? 'No projects found for the selected cloud.'
+          : 'Select a cloud to browse projects.'
+      }
+    />
+  );
 };

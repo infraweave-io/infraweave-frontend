@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useConfig } from '../../../hooks/useConfig';
+import { useProjects } from '../../../hooks/useProjects';
 import { Project } from '../../../types/Deployment';
 
 // Context to hold selected project names, regions, and project metadata
@@ -7,6 +7,10 @@ interface SelectedProjectsContextProps {
   selectedProjectNames: string[];
   selectedRegions: string[];
   projects: Project[];
+  /** True only when there is no cached project list to fall back on. */
+  loadingProjects: boolean;
+  /** Set when the last projects request failed; `projects` may still be populated from cache. */
+  projectsError?: Error;
   toggleProjectSelection: (projectName: string) => void;
   toggleRegionSelection: (regionName: string) => void;
   fetchProjects: () => Promise<void>; // Allows refetching if needed
@@ -28,12 +32,14 @@ export const SelectedProjectsProvider = ({ children }: { children: ReactNode }) 
     return savedRegions ? JSON.parse(savedRegions) : [];
   });
 
-  const [projects, setProjects] = useState<Project[]>(() => {
-    // Load cached projects from localStorage on initial load
-    const cachedProjects = localStorage.getItem('cachedProjects');
-    return cachedProjects ? JSON.parse(cachedProjects) : [];
-  });
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  // Seeded from cache so the filter panel draws immediately, then refreshed in
+  // the background on every mount so added/removed projects show up on their own.
+  const {
+    projects,
+    loading: loadingProjects,
+    error: projectsError,
+    refresh: fetchProjects,
+  } = useProjects();
 
   const [availableRegions, setAvailableRegions] = useState<string[]>([]);
 
@@ -69,50 +75,6 @@ export const SelectedProjectsProvider = ({ children }: { children: ReactNode }) 
     localStorage.setItem('selectedRegions', JSON.stringify(selectedRegions));
   }, [selectedRegions]);
 
-  // Function to fetch project metadata (for mapping names to project IDs)
-  const config = useConfig();
-  const fetchProjects = async () => {
-    try {
-      setLoadingProjects(true);
-
-      const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/projects');
-      const response = await config.fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const json = await response.json();
-
-      let projectsList: Project[] = [];
-      if (Array.isArray(json)) {
-        projectsList = json;
-      } else if (json && Array.isArray(json.items)) {
-        projectsList = json.items;
-      } else if (json && Array.isArray(json.Items)) {
-        projectsList = json.Items;
-      } else {
-        console.error('Unexpected projects response format:', json);
-        projectsList = [];
-      }
-
-      setProjects(projectsList);
-      // Cache the projects in localStorage
-      localStorage.setItem('cachedProjects', JSON.stringify(projectsList));
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
-      setLoadingProjects(false);
-    }
-  };
-
-  // Fetch projects on initial load ONLY if cache is empty
-  useEffect(() => {
-    if (projects.length === 0) {
-      fetchProjects();
-    } else {
-      // Projects loaded from cache, mark as not loading
-      setLoadingProjects(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array - only run on mount
-
   const toggleProjectSelection = (projectName: string) => {
     setSelectedProjectNames((prevNames) => {
       const newSelectedNames = prevNames.includes(projectName)
@@ -141,6 +103,8 @@ export const SelectedProjectsProvider = ({ children }: { children: ReactNode }) 
         selectedProjectNames,
         selectedRegions,
         projects,
+        loadingProjects,
+        projectsError,
         toggleProjectSelection,
         toggleRegionSelection,
         fetchProjects,

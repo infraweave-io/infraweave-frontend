@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useConfig } from '../../hooks/useConfig';
+import { useProjects } from '../../hooks/useProjects';
 import { Project, RepositoryData } from '../../types/Project';
 
 interface SelectedProjectContextProps {
   projects: Project[];
+  /** True only when there is no cached project list to fall back on. */
+  loadingProjects: boolean;
+  /** Set when the last projects request failed; `projects` may still be populated from cache. */
+  projectsError?: Error;
   fetchProjects: () => Promise<void>;
   selectedProjectName: string | null;
   selectedRepositoryData: RepositoryData | null;
@@ -29,8 +33,14 @@ export const SelectedProjectProvider = ({ children }: { children: ReactNode }) =
     return savedRegion ? JSON.parse(savedRegion) : null;
   });
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
+  // Seeded from cache so the project picker is populated on open, then refreshed
+  // in the background so a newly created project appears without a reload.
+  const {
+    projects,
+    loading: loadingProjects,
+    error: projectsError,
+    refresh: fetchProjects,
+  } = useProjects();
   const [availableRegions, setAvailableRegions] = useState<string[]>([]);
 
   const [selectedRepositoryData, setSelectedRepositoryData] = useState<RepositoryData | null>(
@@ -96,26 +106,6 @@ export const SelectedProjectProvider = ({ children }: { children: ReactNode }) =
     localStorage.setItem('selectedRepositoryData', JSON.stringify(selectedRepositoryData));
   }, [selectedRepositoryData]);
 
-  const config = useConfig();
-  const fetchProjects = async () => {
-    try {
-      setLoadingProjects(true);
-      const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/projects');
-      const response = await config.fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const json = await response.json();
-      setProjects(json);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
-      setLoadingProjects(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProjects();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const getSelectedProject = () =>
     projects.find((project) => project.name === selectedProjectName) || null;
 
@@ -146,6 +136,8 @@ export const SelectedProjectProvider = ({ children }: { children: ReactNode }) =
         selectedRegion,
         selectedRepositoryData,
         projects,
+        loadingProjects,
+        projectsError,
         setProjectSelection,
         setRegionSelection,
         setRepositoryDataSelection,

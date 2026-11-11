@@ -9,6 +9,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { StandaloneApp } from './StandaloneApp';
 import { clearResourceNameCache } from '../utils/resourceNameCache';
+import { clearProjectCache } from '../utils/projectCache';
 
 // Set standalone flag for components to detect environment
 (window as any).__INFRAWEAVE_STANDALONE__ = true;
@@ -29,9 +30,9 @@ async function enableMocking() {
   const currentMode = USE_MOCKS ? 'mock' : 'real';
   const lastMode = localStorage.getItem('__app_mode__');
   if (lastMode !== currentMode) {
-    localStorage.removeItem('cachedProjects');
     localStorage.removeItem('selectedProjectNames');
     localStorage.removeItem('selectedRegions');
+    clearProjectCache();
     clearResourceNameCache();
     localStorage.setItem('__app_mode__', currentMode);
   }

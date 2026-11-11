@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useConfig } from '../../hooks/useConfig';
+import React from 'react';
 import { Box, Paper, Typography, TextField, Autocomplete } from '@mui/material';
 import { Progress, ResponseErrorPanel } from '../../standalone/components/ComponentAdapter';
-import { Project, RepositoryData } from '../../types/Project';
+import { RepositoryData } from '../../types/Project';
 import { useSelectedProject } from './DeploySelectedContext';
 
 const DeployEnvFilterPanel = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
+  // The panel used to fetch projects itself, duplicating the context's copy. The
+  // context serves a cached list immediately and refreshes it in the background.
   const {
+    projects,
+    loadingProjects,
+    projectsError,
     selectedProjectName,
     availableRepositoryData,
     selectedRepositoryData,
@@ -18,35 +18,12 @@ const DeployEnvFilterPanel = () => {
     setRepositoryDataSelection,
   } = useSelectedProject();
 
-  const config = useConfig();
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/projects');
-      const response = await config.fetch(url);
-
-      if (response.status >= 300 && response.status < 400) {
-        throw new Error('Redirected to login or guest page');
-      }
-
-      const json = await response.json();
-      setProjects(json);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProjects();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (loading) {
+  if (loadingProjects) {
     return <Progress />;
-  } else if (error) {
-    return <ResponseErrorPanel error={error} />;
+  } else if (projectsError && projects.length === 0) {
+    // Only surfaced when there is nothing to show: a failed background refresh
+    // over a warm cache must not replace a working picker with an error.
+    return <ResponseErrorPanel error={projectsError} />;
   }
 
   return (
