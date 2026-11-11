@@ -14,7 +14,7 @@ interface SelectedProjectsContextProps {
   toggleProjectSelection: (projectName: string) => void;
   toggleRegionSelection: (regionName: string) => void;
   fetchProjects: () => Promise<void>; // Allows refetching if needed
-  availableRegions: string[]; // Regions available based on selected projects
+  availableRegions: string[]; // Regions of the selected projects, or of all projects when none are
 }
 
 const SelectedProjectsContext = createContext<SelectedProjectsContextProps | undefined>(undefined);
@@ -55,11 +55,16 @@ export const SelectedProjectsProvider = ({ children }: { children: ReactNode }) 
       return;
     }
 
-    // Compute availableRegions based on selectedProjectNames
+    // Compute availableRegions based on selectedProjectNames. With nothing
+    // selected, every project's regions are offered: the region filter sits
+    // above the projects, so it has to be pickable before any project is.
     const safeProjects = Array.isArray(projects) ? projects : [];
-    const newAvailableRegions = safeProjects
-      .filter((project) => selectedProjectNames.includes(project.name))
-      .flatMap((project) => project.regions)
+    const regionSource =
+      selectedProjectNames.length > 0
+        ? safeProjects.filter((project) => selectedProjectNames.includes(project.name))
+        : safeProjects;
+    const newAvailableRegions = regionSource
+      .flatMap((project) => project.regions ?? [])
       .filter((value, index, self) => self.indexOf(value) === index); // Remove duplicates
 
     setAvailableRegions(newAvailableRegions);

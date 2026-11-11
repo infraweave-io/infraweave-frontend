@@ -123,6 +123,23 @@ const EnvFilterPanel = () => {
 
   return (
     <>
+      <FilterGroup label="Regions">
+        {availableRegions.map((region) => (
+          <FormControlLabel
+            key={region}
+            control={
+              <Checkbox
+                size="small"
+                checked={selectedRegions.includes(region)}
+                onChange={() => toggleRegionSelection(region)}
+                name={region}
+                color="primary"
+              />
+            }
+            label={region}
+          />
+        ))}
+      </FilterGroup>
       <FilterGroup label="Projects">
         <TextField
           size="small"
@@ -172,23 +189,6 @@ const EnvFilterPanel = () => {
             {hiddenCount} hidden by search
           </Typography>
         )}
-      </FilterGroup>
-      <FilterGroup label="Regions">
-        {availableRegions.map((region) => (
-          <FormControlLabel
-            key={region}
-            control={
-              <Checkbox
-                size="small"
-                checked={selectedRegions.includes(region)}
-                onChange={() => toggleRegionSelection(region)}
-                name={region}
-                color="primary"
-              />
-            }
-            label={region}
-          />
-        ))}
       </FilterGroup>
     </>
   );
