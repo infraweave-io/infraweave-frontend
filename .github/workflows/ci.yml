@@ -26,11 +26,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install Node.js dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -74,11 +74,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install Node.js dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
