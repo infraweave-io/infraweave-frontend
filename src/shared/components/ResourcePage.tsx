@@ -24,6 +24,32 @@ export interface ResourcePageProps {
   hideContent?: boolean;
 }
 
+type RouteType = ResourcePageProps['resourceType'];
+
+/** True when the record declares a type of its own that differs from the route it was opened under. */
+const isWrongRoute = (
+  recordType: string | undefined,
+  routeType: RouteType,
+): recordType is RouteType =>
+  (recordType === 'module' || recordType === 'stack') && recordType !== routeType;
+
+const RedirectToRecord = ({
+  type,
+  track,
+  name = '',
+  version = '',
+}: {
+  type: RouteType;
+  track?: string;
+  name?: string;
+  version?: string;
+}) => (
+  <Navigate
+    replace
+    to={`/infraweave/${type}/${track}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`}
+  />
+);
+
 export const ResourcePage: React.FC<ResourcePageProps> = ({
   resourceType,
   renderTabContent,
@@ -88,15 +114,15 @@ export const ResourcePage: React.FC<ResourcePageProps> = ({
 
   // The API serves modules and stacks from the same lookup, so a stack also loads under
   // /module/ and vice versa. Send the viewer to the route that matches the record's type.
-  const actualType = value?.module_type;
-  if ((actualType === 'module' || actualType === 'stack') && actualType !== resourceType) {
+  const recordType = value?.module_type;
+  if (isWrongRoute(recordType, resourceType)) {
     if (hideContent) return null;
     return (
-      <Navigate
-        replace
-        to={`/infraweave/${actualType}/${track}/${encodeURIComponent(
-          resourceName ?? '',
-        )}/${encodeURIComponent(resourceVersionParam ?? '')}`}
+      <RedirectToRecord
+        type={recordType}
+        track={track}
+        name={resourceName}
+        version={resourceVersionParam}
       />
     );
   }
