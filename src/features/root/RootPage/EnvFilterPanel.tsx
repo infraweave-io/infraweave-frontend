@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react';
-import { useConfig } from '../../../hooks/useConfig';
 import { Box, FormControlLabel, Checkbox, CircularProgress } from '@mui/material';
 
 import React from 'react';
 import { ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
 import { FilterGroup } from '../../../shared/components/FilterGroup';
-import { Project } from '../../../types/Deployment';
 import { useSelectedProjects } from './SelectedProjectsContext';
 
 const EnvFilterPanel = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
+  // The panel used to fetch projects itself, duplicating the context's copy and
+  // spinning on every mount. The context serves a cached list immediately and
+  // refreshes it in the background, so an added or removed project appears on its
+  // own without the list ever blanking out.
   const {
+    projects,
+    loadingProjects,
+    projectsError,
     selectedProjectNames,
     availableRegions,
     selectedRegions,
@@ -21,47 +21,22 @@ const EnvFilterPanel = () => {
     toggleRegionSelection,
   } = useSelectedProjects();
 
-  const config = useConfig();
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const url = config.getApiUrl('api/proxy/api/infraweave/api/v1/projects');
-      const response = await config.fetch(url);
-
-      if (response.status >= 300 && response.status < 400) {
-        throw new Error('Redirected to login or guest page');
-      }
-
-      const json = await response.json();
-      setProjects(json);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch projects on component mount
-  useEffect(() => {
-    fetchProjects();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Check if a project is selected based on the context state
   const isProjectSelected = (projectName: string): boolean => {
     return selectedProjectNames.includes(projectName);
   };
 
-  if (loading) {
+  if (loadingProjects) {
     // Sized to sit inside the filter panel rather than taking over the column.
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
         <CircularProgress size={20} />
       </Box>
     );
-  } else if (error) {
-    return <ResponseErrorPanel error={error} />;
+  } else if (projectsError && projects.length === 0) {
+    // Only surfaced when there is nothing to show: a failed background refresh
+    // over a warm cache must not replace a working panel with an error.
+    return <ResponseErrorPanel error={projectsError} />;
   }
 
   return (
