@@ -58,3 +58,4 @@ e2e-test-report/
 test-results/
 playwright-report/
 playwright-screenshots.html
+.worktrees/

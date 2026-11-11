@@ -37,6 +37,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from 'react-router-dom';
 import { useConfig } from '../../hooks/useConfig';
+import { streamChat, type ChatEvent, type LlmMessage } from './aiAssistant/chatTransport';
 
 type ChatRole = 'assistant' | 'user';
 
@@ -45,18 +46,30 @@ interface ToolEvent {
   type: 'tool_call' | 'tool_result';
   title: string;
   detail: string;
+  isError?: boolean;
 }
 
 interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
+  reasoning?: string;
   toolEvents?: ToolEvent[];
+  // True while this message's turn is still streaming; cleared once the
+  // turn ends (success, error, truncation, or abort) so the render layer
+  // knows not to show the "still thinking" placeholder forever.
+  pending?: boolean;
 }
 
-interface SseFrame {
-  event?: string;
-  data: string;
+// Per-turn scratch state for a single sendMessage call. See handleEvent.
+interface TurnState {
+  historyBuffer: LlmMessage[];
+  failed: boolean;
+  // Set only by the `done` event. The stream can also end (loop exits
+  // without throwing) on a plain EOF that never sent `done` — a proxy or
+  // server closing the connection mid-turn. That case must be treated the
+  // same as `failed`: an incomplete transcript, never committed.
+  done: boolean;
 }
 
 const starterPrompts = [
@@ -87,31 +100,6 @@ const shimmer = keyframes`
 
 const frameId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const readSseFrames = (chunk: string, pending: string): { frames: SseFrame[]; pending: string } => {
-  const text = pending + chunk;
-  const blocks = text.split(/\r?\n\r?\n/);
-  const nextPending = blocks.pop() ?? '';
-
-  return {
-    pending: nextPending,
-    frames: blocks
-      .map((block) => {
-        const lines = block.split(/\r?\n/);
-        const eventLine = lines.find((line) => line.startsWith('event:'));
-        const data = lines
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .join('\n');
-
-        return {
-          event: eventLine?.slice(6).trim(),
-          data,
-        };
-      })
-      .filter((frame) => frame.event || frame.data),
-  };
-};
-
 const stringifyDetail = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
@@ -122,35 +110,6 @@ const stringifyDetail = (value: unknown): string => {
     return String(value);
   }
 };
-
-const pickText = (value: any): string => {
-  if (typeof value === 'string') return value;
-  return (
-    value?.text ??
-    value?.message ??
-    value?.content ??
-    value?.delta ??
-    value?.answer ??
-    stringifyDetail(value)
-  );
-};
-
-const parseFrame = (frame: SseFrame) => {
-  let payload: any = frame.data;
-
-  try {
-    payload = JSON.parse(frame.data);
-  } catch {
-    // Plain text SSE frames are valid for streamed model output.
-  }
-
-  const type =
-    frame.event || (typeof payload === 'object' ? payload.type || payload.event : 'text');
-  return { type, payload };
-};
-
-const toolTitle = (payload: any, fallback: string) =>
-  payload?.name || payload?.tool_name || payload?.tool || payload?.function?.name || fallback;
 
 const getInitialTrack = (pathname: string) => {
   const match = pathname.match(/\/infraweave\/(?:module|stack|provider)\/([^/]+)/);
@@ -250,74 +209,6 @@ const parsePageContext = (pathname: string): PageContext => {
   return { description: 'Viewing the InfraWeave dashboard' };
 };
 
-const splitThinking = (content: string) => {
-  const thinking: string[] = [];
-  let answer = '';
-  let cursor = 0;
-  const tagRegex = /<thinking>([\s\S]*?)<\/thinking>/gi;
-  let match = tagRegex.exec(content);
-
-  while (match) {
-    answer += content.slice(cursor, match.index);
-    thinking.push(match[1].trim());
-    cursor = match.index + match[0].length;
-    match = tagRegex.exec(content);
-  }
-
-  const tail = content.slice(cursor);
-  const openThinkingIndex = tail.toLowerCase().indexOf('<thinking>');
-
-  if (openThinkingIndex >= 0) {
-    answer += tail.slice(0, openThinkingIndex);
-    thinking.push(tail.slice(openThinkingIndex + '<thinking>'.length).trim());
-  } else {
-    answer += tail;
-  }
-
-  return {
-    answer: answer.replace(/<\/?thinking>/gi, '').trim(),
-    thinking: thinking.filter(Boolean),
-  };
-};
-
-const buildChatHistory = (messages: ChatMessage[]) =>
-  messages
-    .filter((message) => {
-      if (!message.content.trim()) return false;
-      return !message.content.startsWith(
-        'Ask me about modules, deployments, stacks, providers, policies',
-      );
-    })
-    .slice(-12)
-    .map((message) => ({
-      role: message.role,
-      content:
-        message.role === 'assistant'
-          ? splitThinking(message.content).answer || message.content
-          : message.content,
-    }));
-
-const buildContextualMessage = (
-  message: string,
-  history: ReturnType<typeof buildChatHistory>,
-  pageContext: PageContext,
-) => {
-  const parts: string[] = [];
-
-  parts.push(`The user is currently: ${pageContext.description}.`);
-
-  if (history.length) {
-    const transcript = history
-      .map(({ role, content }) => `${role === 'user' ? 'User' : 'Assistant'}: ${content}`)
-      .join('\n\n');
-    parts.push(`Previous conversation:\n\n${transcript}`);
-  }
-
-  parts.push(`Current user message: ${message}`);
-
-  return parts.join('\n\n');
-};
-
 export const AiAssistantOverlay: React.FC = () => {
   const config = useConfig();
   const location = useLocation();
@@ -341,6 +232,8 @@ export const AiAssistantOverlay: React.FC = () => {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const previousPathRef = useRef(location.pathname);
+  // The backend owns the transcript; we store what it sends and replay it verbatim.
+  const historyRef = useRef<LlmMessage[]>([]);
 
   useEffect(() => {
     setTrack(getInitialTrack(location.pathname));
@@ -396,33 +289,77 @@ export const AiAssistantOverlay: React.FC = () => {
     );
   };
 
-  const handleFrame = (assistantId: string, frame: SseFrame) => {
-    const { type, payload } = parseFrame(frame);
+  const appendReasoning = (assistantId: string, chunk: string) => {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === assistantId
+          ? { ...message, reasoning: `${message.reasoning ?? ''}${chunk}` }
+          : message,
+      ),
+    );
+  };
 
-    if (type === 'done') return;
+  const markMessageDone = (assistantId: string) => {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === assistantId ? { ...message, pending: false } : message,
+      ),
+    );
+  };
 
-    if (type === 'text' || type === 'message' || type === 'delta') {
-      appendToAssistant(assistantId, pickText(payload));
-      return;
-    }
-
-    if (type === 'tool_call' || type === 'tool_result') {
-      addToolEvent(assistantId, {
-        id: frameId(),
-        type,
-        title: toolTitle(payload, type === 'tool_call' ? 'Tool call' : 'Tool result'),
-        detail: stringifyDetail(payload?.arguments ?? payload?.args ?? payload?.result ?? payload),
-      });
-      return;
-    }
-
-    if (typeof payload === 'string') {
-      appendToAssistant(assistantId, payload);
-      return;
-    }
-
-    if (payload?.text || payload?.content || payload?.message) {
-      appendToAssistant(assistantId, pickText(payload));
+  // Scoped to a single sendMessage call. `historyBuffer` accumulates this
+  // turn's `history_append` events without touching `historyRef.current`,
+  // and `failed` records whether an `error`/`truncated` event ended the
+  // turn early. The caller (sendMessage) only folds the buffer into
+  // historyRef.current once the turn completes successfully (loop finishes
+  // without throwing AND without `failed`); otherwise the buffer is simply
+  // discarded so a partial (unbalanced) transcript never gets replayed on
+  // the next turn.
+  const handleEvent = (assistantId: string, event: ChatEvent, turn: TurnState) => {
+    switch (event.type) {
+      case 'text':
+        appendToAssistant(assistantId, event.text);
+        return;
+      case 'reasoning':
+        appendReasoning(assistantId, event.text);
+        return;
+      case 'tool_call':
+        addToolEvent(assistantId, {
+          id: event.id,
+          type: 'tool_call',
+          title: event.name,
+          detail: stringifyDetail(event.input),
+        });
+        return;
+      case 'tool_result':
+        addToolEvent(assistantId, {
+          id: `${event.id}-result`,
+          type: 'tool_result',
+          title: event.name,
+          detail: event.output_preview,
+          isError: event.is_error,
+        });
+        return;
+      case 'history_append':
+        turn.historyBuffer.push(event.message);
+        return;
+      case 'truncated':
+        setError(`The assistant stopped early: ${event.reason}`);
+        appendToAssistant(assistantId, `\n\nThe assistant stopped early: ${event.reason}`);
+        turn.failed = true;
+        markMessageDone(assistantId);
+        return;
+      case 'error':
+        setError(event.message);
+        appendToAssistant(assistantId, `\n\nI could not reach the assistant: ${event.message}`);
+        turn.failed = true;
+        markMessageDone(assistantId);
+        return;
+      case 'usage':
+        return;
+      case 'done':
+        turn.done = true;
+        return;
     }
   };
 
@@ -430,7 +367,6 @@ export const AiAssistantOverlay: React.FC = () => {
     const trimmed = message.trim();
     if (!trimmed || isStreaming) return;
 
-    const history = buildChatHistory(messages);
     const userMessage: ChatMessage = { id: frameId(), role: 'user', content: trimmed };
     const assistantId = frameId();
     const assistantMessage: ChatMessage = {
@@ -438,6 +374,7 @@ export const AiAssistantOverlay: React.FC = () => {
       role: 'assistant',
       content: '',
       toolEvents: [],
+      pending: true,
     };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
@@ -448,57 +385,46 @@ export const AiAssistantOverlay: React.FC = () => {
     const controller = new AbortController();
     abortRef.current = controller;
     const pageContext = parsePageContext(location.pathname);
+    // Scoped to this turn: only merged into historyRef.current once the
+    // turn finishes without throwing, without an error/truncated event,
+    // AND with a `done` event actually observed. A stream that ends (loop
+    // exits without throwing) but never sent `done` — e.g. a proxy closing
+    // the connection mid-turn — is treated the same as `failed`: the buffer
+    // is discarded so historyRef.current never ends up holding an
+    // unbalanced or partial transcript that would wedge the next request.
+    const turn: TurnState = { historyBuffer: [], failed: false, done: false };
 
     try {
-      const response = await config.fetch(
+      for await (const event of streamChat(
+        config.fetch,
         config.getApiUrl('api/proxy/api/infraweave/api/v1/chat'),
         {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: buildContextualMessage(trimmed, history, pageContext),
-            ...(pageContext.track || track.trim()
-              ? { track: pageContext.track || track.trim() }
-              : {}),
-            ...(pageContext.project ? { project: pageContext.project } : {}),
-            ...(pageContext.region ? { region: pageContext.region } : {}),
-            ...(pageContext.environment ? { environment: pageContext.environment } : {}),
-          }),
+          message: trimmed,
+          history: historyRef.current,
+          page_context: pageContext.description,
+          ...(pageContext.track || track.trim()
+            ? { track: pageContext.track || track.trim() }
+            : {}),
+          ...(pageContext.project ? { project: pageContext.project } : {}),
+          ...(pageContext.region ? { region: pageContext.region } : {}),
+          ...(pageContext.environment ? { environment: pageContext.environment } : {}),
         },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Chat request failed with ${response.status}`);
+        controller.signal,
+      )) {
+        handleEvent(assistantId, event, turn);
       }
-
-      if (!response.body) {
-        appendToAssistant(assistantId, await response.text());
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let pending = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const decoded = decoder.decode(value, { stream: true });
-        const parsed = readSseFrames(decoded, pending);
-        pending = parsed.pending;
-        parsed.frames.forEach((frame) => handleFrame(assistantId, frame));
-      }
-
-      const tail = decoder.decode();
-      const parsedTail = readSseFrames(tail, pending);
-      parsedTail.frames.forEach((frame) => handleFrame(assistantId, frame));
-
-      if (parsedTail.pending.trim()) {
-        appendToAssistant(assistantId, parsedTail.pending.trim());
+      if (!turn.failed && turn.done) {
+        historyRef.current = [...historyRef.current, ...turn.historyBuffer];
+      } else if (!turn.failed) {
+        // Loop ended without throwing and without an error/truncated event,
+        // but `done` never arrived either (e.g. a proxy closed the
+        // connection mid-turn). The buffer above is correctly discarded,
+        // but the UI otherwise looks like a normal completion — tell the
+        // user the turn didn't actually finish, so what they see doesn't
+        // silently diverge from what gets replayed next turn.
+        const messageText = 'The connection ended before the assistant finished responding.';
+        setError(messageText);
+        appendToAssistant(assistantId, `\n\n${messageText}`);
       }
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
@@ -510,6 +436,7 @@ export const AiAssistantOverlay: React.FC = () => {
       }
     } finally {
       setIsStreaming(false);
+      markMessageDone(assistantId);
       abortRef.current = null;
     }
   };
@@ -620,8 +547,8 @@ export const AiAssistantOverlay: React.FC = () => {
                 const isUser = message.role === 'user';
                 const hasTools = !!message.toolEvents?.length;
                 const expanded = expandedMessageId === message.id;
-                const { answer, thinking } = splitThinking(message.content);
-                const hasThinking = thinking.length > 0;
+                const answer = message.content;
+                const hasThinking = Boolean(message.reasoning);
                 const thinkingExpanded = expandedThinkingMessageId === message.id;
                 const isIntro =
                   !isUser &&
@@ -711,34 +638,30 @@ export const AiAssistantOverlay: React.FC = () => {
                               </ListItemButton>
                             </List>
                             <Collapse in={thinkingExpanded} timeout="auto" unmountOnExit>
-                              <Stack spacing={0.75}>
-                                {thinking.map((thought, index) => (
-                                  <Box
-                                    key={`${message.id}-thinking-${index}`}
-                                    sx={{
-                                      p: 1.25,
-                                      borderRadius: 1.25,
-                                      bgcolor: alpha(
-                                        theme.palette.warning.main,
-                                        theme.palette.mode === 'dark' ? 0.12 : 0.08,
-                                      ),
-                                      border: '1px solid',
-                                      borderColor: alpha(theme.palette.warning.main, 0.24),
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        color: 'text.secondary',
-                                        fontStyle: 'italic',
-                                        lineHeight: 1.55,
-                                      }}
-                                    >
-                                      {thought}
-                                    </Typography>
-                                  </Box>
-                                ))}
-                              </Stack>
+                              <Box
+                                sx={{
+                                  p: 1.25,
+                                  borderRadius: 1.25,
+                                  bgcolor: alpha(
+                                    theme.palette.warning.main,
+                                    theme.palette.mode === 'dark' ? 0.12 : 0.08,
+                                  ),
+                                  border: '1px solid',
+                                  borderColor: alpha(theme.palette.warning.main, 0.24),
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: 'text.secondary',
+                                    fontStyle: 'italic',
+                                    lineHeight: 1.55,
+                                    whiteSpace: 'pre-wrap',
+                                  }}
+                                >
+                                  {message.reasoning}
+                                </Typography>
+                              </Box>
                             </Collapse>
                           </Box>
                         )}
@@ -846,7 +769,8 @@ export const AiAssistantOverlay: React.FC = () => {
                             </Box>
                           </>
                         ) : (
-                          !thinking.length && (
+                          !hasThinking &&
+                          message.pending && (
                             <Stack direction="row" spacing={1} alignItems="center">
                               <CircularProgress size={16} />
                               <Typography
@@ -930,7 +854,13 @@ export const AiAssistantOverlay: React.FC = () => {
                                     )
                                   }
                                   label={event.title}
-                                  color={event.type === 'tool_call' ? 'info' : 'success'}
+                                  color={
+                                    event.isError
+                                      ? 'error'
+                                      : event.type === 'tool_call'
+                                        ? 'info'
+                                        : 'success'
+                                  }
                                   variant="outlined"
                                   sx={{ mb: 0.75 }}
                                 />
@@ -1082,7 +1012,8 @@ export const AiAssistantOverlay: React.FC = () => {
                   <IconButton
                     size="small"
                     disabled={isStreaming || !assistantActive}
-                    onClick={() =>
+                    onClick={() => {
+                      historyRef.current = [];
                       setMessages([
                         {
                           id: frameId(),
@@ -1090,8 +1021,8 @@ export const AiAssistantOverlay: React.FC = () => {
                           content:
                             'Ask me about modules, deployments, stacks, providers, policies, and the current InfraWeave catalog.',
                         },
-                      ])
-                    }
+                      ]);
+                    }}
                   >
                     <DeleteOutlineIcon fontSize="small" />
                   </IconButton>
