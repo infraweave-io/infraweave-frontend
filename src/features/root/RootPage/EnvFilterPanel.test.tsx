@@ -257,6 +257,146 @@ describe('EnvFilterPanel', () => {
     await waitFor(() => expect(requestCount).toBe(2));
   });
 
+  describe('project search and ordering', () => {
+    /** Names of the project checkboxes, in the order they are rendered. */
+    const renderedProjects = () =>
+      screen
+        // queryAll, not getAll: an empty result is a valid outcome here.
+        .queryAllByRole('checkbox')
+        .map((box) => box.getAttribute('name'))
+        .filter((name) => name?.endsWith('Account 22'));
+
+    const seedFreshCache = () =>
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), projects }));
+
+    it('lists projects alphabetically rather than in API order', () => {
+      // The API returns Dev, Staging, Prod — the order rows land in database.
+      seedFreshCache();
+      renderPanel();
+
+      expect(renderedProjects()).toEqual([
+        'Dev Account 22',
+        'Prod Account 22',
+        'Staging Account 22',
+      ]);
+    });
+
+    it('moves the projects selected on arrival to the top, alphabetically', () => {
+      seedFreshCache();
+      localStorage.setItem(
+        'selectedProjectNames',
+        JSON.stringify(['Staging Account 22', 'Prod Account 22']),
+      );
+
+      renderPanel();
+
+      // Both selected, so both rise above Dev and sort against each other.
+      expect(renderedProjects()).toEqual([
+        'Prod Account 22',
+        'Staging Account 22',
+        'Dev Account 22',
+      ]);
+    });
+
+    it('does not reorder the list under the cursor as boxes are ticked', async () => {
+      seedFreshCache();
+      renderPanel();
+
+      await userEvent.click(screen.getByLabelText('Staging Account 22'));
+      await userEvent.click(screen.getByLabelText('Prod Account 22'));
+
+      // Pinning on the live selection moved every remaining row between these two
+      // clicks, so the second one landed on whatever had slid into its place.
+      expect(renderedProjects()).toEqual([
+        'Dev Account 22',
+        'Prod Account 22',
+        'Staging Account 22',
+      ]);
+      expect(screen.getByLabelText('Staging Account 22')).toBeChecked();
+      expect(screen.getByLabelText('Prod Account 22')).toBeChecked();
+
+      // The next search is when reordering is safe again — nothing is under the
+      // cursor by then.
+      await userEvent.type(screen.getByLabelText('Search projects'), 'a');
+      await userEvent.click(screen.getByLabelText('Clear search'));
+      expect(renderedProjects()).toEqual([
+        'Prod Account 22',
+        'Staging Account 22',
+        'Dev Account 22',
+      ]);
+    });
+
+    it('filters on a subsequence, not just a substring', async () => {
+      seedFreshCache();
+      renderPanel();
+
+      // 'sgacc' appears in "Staging Account 22" only as scattered characters.
+      await userEvent.type(screen.getByLabelText('Search projects'), 'sgacc');
+
+      expect(renderedProjects()).toEqual(['Staging Account 22']);
+      expect(screen.getByText('2 hidden by search')).toBeInTheDocument();
+    });
+
+    it('narrows on every keystroke, with no Enter press', async () => {
+      seedFreshCache();
+      renderPanel();
+      const search = screen.getByLabelText('Search projects');
+
+      // Asserting between keystrokes, so nothing here can be satisfied by a
+      // filter that only applies on submit. 'd' hits Dev and Prod (Dev first: it
+      // matches at position 0), and 'e' then drops Prod.
+      await userEvent.type(search, 'd');
+      expect(renderedProjects()).toEqual(['Dev Account 22', 'Prod Account 22']);
+
+      await userEvent.type(search, 'e');
+      expect(renderedProjects()).toEqual(['Dev Account 22']);
+
+      // Backspace has to widen it again, not just stop narrowing.
+      await userEvent.type(search, '{backspace}');
+      expect(renderedProjects()).toEqual(['Dev Account 22', 'Prod Account 22']);
+
+      // And Enter changes nothing — there is no submit step to wait for.
+      await userEvent.type(search, '{enter}');
+      expect(renderedProjects()).toEqual(['Dev Account 22', 'Prod Account 22']);
+    });
+
+    it('keeps a selected project visible, below the matches, when it does not match', async () => {
+      seedFreshCache();
+      renderPanel();
+
+      await userEvent.click(screen.getByLabelText('Dev Account 22'));
+      await userEvent.type(screen.getByLabelText('Search projects'), 'prod');
+
+      // Hiding it would strand a filter the user cannot see or switch off — but it
+      // is not a search result either, so it sits under the matches, labelled,
+      // rather than pushing them down.
+      expect(renderedProjects()).toEqual(['Prod Account 22', 'Dev Account 22']);
+      expect(screen.getByText('Selected, not matching')).toBeInTheDocument();
+    });
+
+    it('says the list is empty rather than blaming a search nobody typed', async () => {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), projects: [] }));
+
+      renderPanel();
+
+      // A tenant with no projects, or a cold cache, used to be told that nothing
+      // matched “”.
+      expect(await screen.findByText('No projects available.')).toBeInTheDocument();
+    });
+
+    it('says so when nothing matches, and recovers when cleared', async () => {
+      seedFreshCache();
+      renderPanel();
+
+      await userEvent.type(screen.getByLabelText('Search projects'), 'zzz');
+      expect(renderedProjects()).toEqual([]);
+      expect(screen.getByText('No projects match “zzz”.')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByLabelText('Clear search'));
+      expect(renderedProjects()).toHaveLength(3);
+    });
+  });
+
   it('offers the regions of a selected project, from cache alone', async () => {
     localStorage.setItem(
       CACHE_KEY,
