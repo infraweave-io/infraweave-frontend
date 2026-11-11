@@ -24,9 +24,6 @@ node_modules/
 !.yarn/sdks
 !.yarn/versions
 
-# Node version directives
-.nvmrc
-
 # dotenv environment variables file
 # .env and .env.mock are committed defaults. .env.local / .env.*.local /
 # .env.real are gitignored — they hold personal overrides or backend creds.
