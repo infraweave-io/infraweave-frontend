@@ -6,7 +6,7 @@ import { useConfig } from '../../../hooks/useConfig';
 import { Event } from '../../../types/Event';
 import { Deployment } from '../../../types/Deployment';
 import { ChangeRecord } from '../../../types/Log';
-import { Logs } from './Logs';
+import { Logs, LogViewLink } from './Logs';
 import { ChangesPlan } from './ChangesPlan';
 import { DeploymentIdBadge, EnvironmentBadge } from '../../../shared/components/DeploymentBadges';
 
@@ -89,12 +89,14 @@ export const DrawerContent = ({
   deployment,
   viewLogs,
   jobStatus,
+  logView,
 }: {
   toggleDrawer: (isOpen: boolean) => void;
   event?: Event;
   deployment?: Deployment;
   viewLogs: boolean;
   jobStatus?: string;
+  logView?: LogViewLink;
 }) => {
   const status = jobStatus || event?.status;
   const theme = useTheme();
@@ -177,7 +179,7 @@ export const DrawerContent = ({
       </Box>
       <Box sx={{ flexGrow: 1, overflow: 'auto', bgcolor: 'background.default' }}>
         {viewLogs ? (
-          <Logs event={event} deployment={deployment} />
+          <Logs event={event} deployment={deployment} logView={logView} />
         ) : (
           <ChangesPlan event={event} deployment={deployment} />
         )}

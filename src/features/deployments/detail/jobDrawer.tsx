@@ -3,11 +3,14 @@ import { Drawer } from '@mui/material';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Deployment } from '../../../types/Deployment';
 import { Event } from '../../../types/Event';
+import { LogViewerState } from '../../../standalone/components/ComponentAdapter';
 import { DrawerContent } from './ReadLogsButton';
 
 /**
  * The job whose logs or changes the deployment page has open, kept in the URL so a link can open
- * the drawer directly, e.g. `?job=abc123&view=logs&type=mutate`.
+ * the drawer directly, e.g. `?job=abc123&view=logs&type=mutate`. The log viewer's search, mode,
+ * word wrap, match and selected line ride along, e.g. `&q=plan:&mode=highlight&wrap=1&match=3`
+ * or `&line=120`, so the link opens the logs exactly as they were.
  */
 
 export type JobView = 'logs' | 'changes';
@@ -25,6 +28,40 @@ type JobDrawerState = { jobStatus?: string } | null;
 const JOB_KEY = 'job';
 const VIEW_KEY = 'view';
 const TYPE_KEY = 'type';
+const LOG_KEYS = ['q', 'mode', 'wrap', 'match', 'line'] as const;
+
+const positiveInt = (value: string | null): number | undefined => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+
+export const readLogViewState = (params: URLSearchParams): Partial<LogViewerState> => {
+  const state: Partial<LogViewerState> = {};
+  const search = params.get('q');
+  if (search) state.search = search;
+  if (params.get('mode') === 'highlight') state.filter = false;
+  if (params.get('wrap') === '1') state.wrap = true;
+  const match = positiveInt(params.get('match'));
+  if (match) state.match = match - 1;
+  const line = positiveInt(params.get('line'));
+  if (line) state.line = line;
+  return state;
+};
+
+/** Defaults (filter mode, no wrap, first match) are left out to keep links short. */
+export const writeLogViewState = (
+  current: URLSearchParams,
+  state: LogViewerState,
+): URLSearchParams => {
+  const next = new URLSearchParams(current);
+  LOG_KEYS.forEach((key) => next.delete(key));
+  if (state.search) next.set('q', state.search);
+  if (!state.filter) next.set('mode', 'highlight');
+  if (state.wrap) next.set('wrap', '1');
+  if (state.match > 0) next.set('match', String(state.match + 1));
+  if (state.line !== undefined) next.set('line', String(state.line));
+  return next;
+};
 
 const isJobView = (value: string | null): value is JobView =>
   value === 'logs' || value === 'changes';
@@ -32,6 +69,8 @@ const isJobView = (value: string | null): value is JobView =>
 /** `current` is kept so opening a job doesn't drop the rest of the page's query. */
 export const jobDrawerSearch = (current: URLSearchParams, target: JobDrawerTarget): string => {
   const next = new URLSearchParams(current);
+  // Log settings belong to the job they were made on.
+  LOG_KEYS.forEach((key) => next.delete(key));
   next.set(JOB_KEY, target.jobId);
   next.set(VIEW_KEY, target.view);
   if (target.changeType) next.set(TYPE_KEY, target.changeType.toLowerCase());
@@ -56,6 +95,7 @@ export const useJobDrawer = () => {
           next.delete(JOB_KEY);
           next.delete(VIEW_KEY);
           next.delete(TYPE_KEY);
+          LOG_KEYS.forEach((key) => next.delete(key));
           return next;
         },
         // Only links add a history entry.
@@ -64,11 +104,17 @@ export const useJobDrawer = () => {
     [setParams],
   );
 
-  return { target, close };
+  const setLogViewState = useCallback(
+    (state: LogViewerState) =>
+      setParams((current) => writeLogViewState(current, state), { replace: true }),
+    [setParams],
+  );
+
+  return { target, close, logViewState: readLogViewState(params), setLogViewState };
 };
 
 export const JobDrawer = ({ deployment }: { deployment?: Deployment }) => {
-  const { target, close } = useJobDrawer();
+  const { target, close, logViewState, setLogViewState } = useJobDrawer();
   const location = useLocation();
   const jobStatus = (location.state as JobDrawerState)?.jobStatus;
 
@@ -111,11 +157,14 @@ export const JobDrawer = ({ deployment }: { deployment?: Deployment }) => {
     >
       {shown && (
         <DrawerContent
+          // A fresh viewer per job, so one job's search doesn't carry over to the next.
+          key={`${shown.target.jobId}:${shown.target.view}`}
           toggleDrawer={(isOpen) => !isOpen && close()}
           event={event}
           deployment={deployment}
           viewLogs={shown.target.view === 'logs'}
           jobStatus={shown.jobStatus}
+          logView={{ initialState: logViewState, onStateChange: setLogViewState }}
         />
       )}
     </Drawer>
