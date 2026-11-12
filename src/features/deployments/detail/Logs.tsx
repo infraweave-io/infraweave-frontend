@@ -4,18 +4,22 @@ import {
   Progress,
   ResponseErrorPanel,
   LogViewer,
+  LogViewerProps,
 } from '../../../standalone/components/ComponentAdapter';
 import { Log } from '../../../types/Log';
 import { Event } from '../../../types/Event';
 import { Deployment } from '../../../types/Deployment';
 import { useAsync } from '../../../hooks/useAsync';
 
+/** Lets the drawer keep the viewer's search, mode, wrap and position in the URL. */
+export type LogViewLink = Pick<LogViewerProps, 'initialState' | 'onStateChange'>;
+
 export const Logs = (
-  props: { event?: Event; deployment?: Deployment } = {
+  props: { event?: Event; deployment?: Deployment; logView?: LogViewLink } = {
     event: undefined,
   },
 ) => {
-  const { event, deployment } = props;
+  const { event, deployment, logView } = props;
 
   const encodedJobId = encodeURIComponent(event?.job_id ?? '');
   const project = deployment?.project_id;
@@ -103,7 +107,7 @@ export const Logs = (
     let currentChunk = '';
     let pageCount = 0;
     const seenTokens = new Set<string>();
-
+    let num_empty_logs = 0;
     try {
       // Keep fetching forward until we have all logs
       do {
@@ -141,6 +145,12 @@ export const Logs = (
         } else {
           console.log('[LOGS] ⚠️ No logs in response');
           currentChunk = '';
+          // TODO make a real fix for logs.
+          num_empty_logs += 1;
+          if (num_empty_logs > 2) {
+            console.log('[LOGS] ⚠️ No logs in response more than 2 times, stopping.');
+            break;
+          }
         }
 
         // Track this token
@@ -333,5 +343,5 @@ export const Logs = (
     return <Progress />;
   }
 
-  return <LogViewer text={logs ?? 'failed to fetch logs'} />;
+  return <LogViewer text={logs ?? 'failed to fetch logs'} {...logView} />;
 };

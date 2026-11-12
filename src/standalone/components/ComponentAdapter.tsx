@@ -1131,23 +1131,148 @@ export const SimpleStepperStep: React.FC<SimpleStepperStepProps> = ({ title, chi
 };
 
 // LogViewer - Standalone implementation
-export interface LogViewerProps {
-  text: string;
+/** What the viewer has set up, so a link can reopen the logs exactly as they were. */
+export interface LogViewerState {
+  search: string;
+  /** Show only matching lines (true) or highlight matches in place (false). */
+  filter: boolean;
+  wrap: boolean;
+  /** Zero-based index of the current search match. */
+  match: number;
+  /** One-based number of the selected line. */
+  line?: number;
 }
 
-export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
+export interface LogViewerProps {
+  text: string;
+  /** Read once, on mount. */
+  initialState?: Partial<LogViewerState>;
+  onStateChange?: (state: LogViewerState) => void;
+}
+
+const MIN_SEARCH_LENGTH = 2;
+
+type LogLineData = {
+  number: number;
+  text: string;
+  /** Start offsets of the search matches in this line. */
+  matches?: number[];
+  /** Global index of this line's first match. */
+  firstMatch: number;
+};
+
+// Props are kept primitive (or stable) so only the lines that changed re-render on large logs.
+const LogLine = React.memo(function LogLine({
+  number,
+  text,
+  matches,
+  firstMatch,
+  searchLength,
+  activeMatch,
+  selected,
+  wrap,
+  gutterWidth,
+  onSelect,
+}: LogLineData & {
+  searchLength: number;
+  /** Index within this line of the current match, or -1. */
+  activeMatch: number;
+  selected: boolean;
+  wrap: boolean;
+  gutterWidth: string;
+  onSelect: (line: number) => void;
+}) {
+  let content: React.ReactNode = text;
+  if (matches) {
+    const parts: React.ReactNode[] = [];
+    let last = 0;
+    matches.forEach((start, i) => {
+      const isCurrentMatch = i === activeMatch;
+      parts.push(text.substring(last, start));
+      parts.push(
+        <span
+          key={i}
+          data-match={firstMatch + i}
+          style={{
+            // Muted amber rather than pure yellow: legible against the log
+            // surface without the highlighter-pen look.
+            backgroundColor: isCurrentMatch ? '#f0b429' : 'rgba(240, 180, 41, 0.32)',
+            color: isCurrentMatch ? '#1a1d21' : 'inherit',
+            borderRadius: '2px',
+            fontWeight: isCurrentMatch ? 600 : 'normal',
+          }}
+        >
+          {text.substring(start, start + searchLength)}
+        </span>,
+      );
+      last = start + searchLength;
+    });
+    parts.push(text.substring(last));
+    content = parts;
+  }
+
+  return (
+    <div
+      data-line={number}
+      style={{
+        display: 'flex',
+        backgroundColor: selected ? 'rgba(56, 139, 253, 0.2)' : undefined,
+      }}
+    >
+      <span
+        onClick={() => onSelect(number)}
+        title={selected ? 'Deselect line' : `Link to line ${number}`}
+        style={{
+          flex: 'none',
+          minWidth: gutterWidth,
+          marginRight: '2ch',
+          textAlign: 'right',
+          color: selected ? '#c9ced6' : '#5c6370',
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        {number}
+      </span>
+      <span
+        style={{
+          flex: '1 1 auto',
+          minWidth: 0,
+          whiteSpace: wrap ? 'pre-wrap' : 'pre',
+          wordBreak: wrap ? 'break-word' : 'normal',
+        }}
+      >
+        {content}
+      </span>
+    </div>
+  );
+});
+
+type PendingScroll = { line?: number; match?: number; smooth?: boolean };
+
+export const LogViewer: React.FC<LogViewerProps> = ({ text, initialState, onStateChange }) => {
   const { mode } = useThemeMode();
-  const [searchTerm, setSearchTerm] = React.useState('');
+  const [initial] = React.useState(() => initialState ?? {});
+  const [searchTerm, setSearchTerm] = React.useState(initial.search ?? '');
   const debouncedTerm = useDebounce(searchTerm, 250);
   const deferredTerm = useDeferredValue(debouncedTerm);
   const isSearching = searchTerm !== deferredTerm;
-  const isSearchActive = deferredTerm.length >= 2;
-  const [filterMode, setFilterMode] = React.useState(true);
-  const [currentMatchIndex, setCurrentMatchIndex] = React.useState(0);
-  const [wordWrap, setWordWrap] = React.useState(false);
-  const matchRefs = React.useRef<(HTMLSpanElement | null)[]>([]);
+  const isSearchActive = deferredTerm.length >= MIN_SEARCH_LENGTH;
+  const [filterMode, setFilterMode] = React.useState(initial.filter ?? true);
+  const [currentMatchIndex, setCurrentMatchIndex] = React.useState(initial.match ?? 0);
+  const [wordWrap, setWordWrap] = React.useState(initial.wrap ?? false);
+  const [selectedLine, setSelectedLine] = React.useState(initial.line);
   const paperRef = React.useRef<HTMLDivElement>(null);
   const isAtBottom = React.useRef(true);
+  // Where to scroll once it has rendered: the line or match a link points at, or the match
+  // just navigated to. A link's target may not have loaded yet, so it waits until it has.
+  const pendingScroll = React.useRef<PendingScroll | null>(
+    initial.line !== undefined
+      ? { line: initial.line }
+      : (initial.search?.length ?? 0) >= MIN_SEARCH_LENGTH
+        ? { match: initial.match ?? 0 }
+        : null,
+  );
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -1156,152 +1281,132 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
     isAtBottom.current = atBottom;
   };
 
-  const { displayText, matchCount } = React.useMemo(() => {
-    if (deferredTerm.length <= 1) return { displayText: text, matchCount: 0 };
-    if (!deferredTerm) return { displayText: text, matchCount: 0 };
-
+  const allLines = React.useMemo(() => {
     const lines = text.split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+    return lines;
+  }, [text]);
 
-    if (filterMode) {
-      // Filter mode: only show matching lines with highlights
-      let count = 0;
-      const filtered = lines
-        .filter((line) => line.toLowerCase().includes(deferredTerm.toLowerCase()))
-        .map((line) => {
-          const lowerLine = line.toLowerCase();
-          const lowerSearch = deferredTerm.toLowerCase();
-
-          let result = '';
-          let lastIndex = 0;
-          let index = lowerLine.indexOf(lowerSearch);
-
-          while (index !== -1) {
-            result += line.substring(lastIndex, index);
-            result += `__HIGHLIGHT_START_${count}__${line.substring(
-              index,
-              index + deferredTerm.length,
-            )}__HIGHLIGHT_END__`;
-            count++;
-            lastIndex = index + deferredTerm.length;
-            index = lowerLine.indexOf(lowerSearch, lastIndex);
-          }
-          result += line.substring(lastIndex);
-          return result;
-        });
-
-      return { displayText: filtered.join('\n'), matchCount: count };
-    }
-    // Highlight mode: show all lines with matches highlighted
+  const { visibleLines, matchCount } = React.useMemo(() => {
+    const lowerSearch = deferredTerm.toLowerCase();
+    const visible: LogLineData[] = [];
     let count = 0;
-    const highlighted = lines.map((line) => {
-      const lowerLine = line.toLowerCase();
-      const lowerSearch = deferredTerm.toLowerCase();
 
-      if (lowerLine.includes(lowerSearch)) {
-        let result = '';
-        let lastIndex = 0;
-        let index = lowerLine.indexOf(lowerSearch);
-
-        while (index !== -1) {
-          result += line.substring(lastIndex, index);
-          result += `__HIGHLIGHT_START_${count}__${line.substring(
-            index,
-            index + deferredTerm.length,
-          )}__HIGHLIGHT_END__`;
-          count++;
-          lastIndex = index + deferredTerm.length;
-          index = lowerLine.indexOf(lowerSearch, lastIndex);
-        }
-        result += line.substring(lastIndex);
-        return result;
+    allLines.forEach((line, i) => {
+      const number = i + 1;
+      if (!isSearchActive) {
+        visible.push({ number, text: line, firstMatch: 0 });
+        return;
       }
-      return line;
+      const lowerLine = line.toLowerCase();
+      const matches: number[] = [];
+      let index = lowerLine.indexOf(lowerSearch);
+      while (index !== -1) {
+        matches.push(index);
+        index = lowerLine.indexOf(lowerSearch, index + lowerSearch.length);
+      }
+      // Filter mode: only show matching lines
+      if (filterMode && matches.length === 0) return;
+      visible.push({
+        number,
+        text: line,
+        matches: matches.length > 0 ? matches : undefined,
+        firstMatch: count,
+      });
+      count += matches.length;
     });
 
-    return { displayText: highlighted.join('\n'), matchCount: count };
-  }, [text, deferredTerm, filterMode]);
+    return { visibleLines: visible, matchCount: count };
+  }, [allLines, deferredTerm, isSearchActive, filterMode]);
 
-  // Reset match index when search term or mode changes
+  // Reset match index when search term or mode changes, but not on mount, where it may come
+  // from a link.
+  const searchKey = `${deferredTerm}\u0000${filterMode}`;
+  const lastSearchKey = React.useRef(searchKey);
   React.useEffect(() => {
+    if (lastSearchKey.current === searchKey) return;
+    lastSearchKey.current = searchKey;
     setCurrentMatchIndex(0);
-    matchRefs.current = [];
-  }, [deferredTerm, filterMode]);
-
-  // Scroll to current match
-  React.useEffect(() => {
-    if (matchCount > 0 && matchRefs.current[currentMatchIndex]) {
-      matchRefs.current[currentMatchIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, [currentMatchIndex, filterMode, matchCount]);
+    pendingScroll.current = { match: 0, smooth: true };
+  }, [searchKey]);
 
   // Scroll to bottom when text changes (auto-scroll)
   React.useEffect(() => {
-    // Only scroll if we are not searching/filtering
-    // And if the user was previously at the bottom
-    if (paperRef.current && !isSearchActive && isAtBottom.current) {
+    // Only scroll if we are not searching/filtering, nothing is selected or waiting to be
+    // scrolled to, and the user was previously at the bottom
+    if (
+      paperRef.current &&
+      !isSearchActive &&
+      selectedLine === undefined &&
+      !pendingScroll.current &&
+      isAtBottom.current
+    ) {
       paperRef.current.scrollTo({
         top: paperRef.current.scrollHeight,
         behavior: 'smooth',
       });
     }
-  }, [text, displayText, isSearchActive]);
+  }, [text, isSearchActive, selectedLine]);
+
+  // Scroll to the pending line or match once it is on screen.
+  React.useEffect(() => {
+    const target = pendingScroll.current;
+    if (!target || !paperRef.current) return;
+    const selector =
+      target.line !== undefined ? `[data-line="${target.line}"]` : `[data-match="${target.match}"]`;
+    const element = paperRef.current.querySelector(selector);
+    if (element) {
+      element.scrollIntoView({ behavior: target.smooth ? 'smooth' : 'auto', block: 'center' });
+      pendingScroll.current = null;
+    } else if (target.line !== undefined ? target.line <= allLines.length : !isSearchActive) {
+      // Loaded but hidden by the filter, or no longer searching: nothing to wait for.
+      pendingScroll.current = null;
+    }
+  });
+
+  const onStateChangeRef = React.useRef(onStateChange);
+  React.useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
+
+  const isFirstState = React.useRef(true);
+  React.useEffect(() => {
+    if (isFirstState.current) {
+      isFirstState.current = false;
+      return;
+    }
+    onStateChangeRef.current?.({
+      search: debouncedTerm,
+      filter: filterMode,
+      wrap: wordWrap,
+      match: currentMatchIndex,
+      line: selectedLine,
+    });
+  }, [debouncedTerm, filterMode, wordWrap, currentMatchIndex, selectedLine]);
+
+  const goToMatch = (index: number) => {
+    pendingScroll.current = { match: index, smooth: true };
+    setCurrentMatchIndex(index);
+  };
 
   const goToNextMatch = () => {
     if (matchCount > 0) {
-      setCurrentMatchIndex((prev) => (prev + 1) % matchCount);
+      goToMatch((currentMatchIndex + 1) % matchCount);
     }
   };
 
   const goToPrevMatch = () => {
     if (matchCount > 0) {
-      setCurrentMatchIndex((prev) => (prev - 1 + matchCount) % matchCount);
+      goToMatch((currentMatchIndex - 1 + matchCount) % matchCount);
     }
   };
 
-  const renderedText = React.useMemo(() => {
-    if (!deferredTerm) return displayText;
+  const selectLine = React.useCallback(
+    (line: number) => setSelectedLine((current) => (current === line ? undefined : line)),
+    [],
+  );
 
-    const parts = displayText.split(/(__HIGHLIGHT_START_\d+__|__HIGHLIGHT_END__)/);
-
-    return parts.map((part, index) => {
-      const highlightMatch = part.match(/__HIGHLIGHT_START_(\d+)__/);
-      if (highlightMatch) {
-        const _globalMatchIndex = parseInt(highlightMatch[1], 10);
-        return null; // Skip the marker
-      } else if (part === '__HIGHLIGHT_END__') {
-        return null; // Skip the marker
-      } else if (index > 0 && parts[index - 1]?.startsWith('__HIGHLIGHT_START_')) {
-        const markerMatch = parts[index - 1].match(/__HIGHLIGHT_START_(\d+)__/);
-        const globalMatchIndex = markerMatch ? parseInt(markerMatch[1], 10) : -1;
-        const isCurrentMatch = globalMatchIndex === currentMatchIndex;
-
-        return (
-          <span
-            key={index}
-            ref={(el) => {
-              if (globalMatchIndex >= 0) {
-                matchRefs.current[globalMatchIndex] = el;
-              }
-            }}
-            style={{
-              // Muted amber rather than pure yellow: legible against the log
-              // surface without the highlighter-pen look.
-              backgroundColor: isCurrentMatch ? '#f0b429' : 'rgba(240, 180, 41, 0.32)',
-              color: isCurrentMatch ? '#1a1d21' : 'inherit',
-              borderRadius: '2px',
-              fontWeight: isCurrentMatch ? 600 : 'normal',
-            }}
-          >
-            {part}
-          </span>
-        );
-      }
-      return part;
-    });
-  }, [displayText, deferredTerm, currentMatchIndex]);
+  const gutterWidth = `${String(allLines.length).length}ch`;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', pt: 2, px: 2 }}>
@@ -1346,7 +1451,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
             {matchCount > 0 && (
               <>
                 <Chip
-                  label={`${currentMatchIndex + 1} / ${matchCount}`}
+                  label={`${Math.min(currentMatchIndex + 1, matchCount)} / ${matchCount}`}
                   size="small"
                   color="secondary"
                 />
@@ -1417,16 +1522,28 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text }) => {
             No logs available. If you recently started a job it will be available soon.
           </Typography>
         ) : (
-          <pre
-            style={{
-              margin: 0,
-              whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-              wordBreak: wordWrap ? 'break-word' : 'normal',
-              overflowX: wordWrap ? 'visible' : 'auto',
-            }}
-          >
-            {deferredTerm ? renderedText : displayText || text}
-          </pre>
+          <div style={{ width: wordWrap ? '100%' : 'max-content', minWidth: '100%' }}>
+            {visibleLines.map((line) => {
+              const activeMatch =
+                line.matches &&
+                currentMatchIndex >= line.firstMatch &&
+                currentMatchIndex < line.firstMatch + line.matches.length
+                  ? currentMatchIndex - line.firstMatch
+                  : -1;
+              return (
+                <LogLine
+                  key={line.number}
+                  {...line}
+                  searchLength={deferredTerm.length}
+                  activeMatch={activeMatch}
+                  selected={line.number === selectedLine}
+                  wrap={wordWrap}
+                  gutterWidth={gutterWidth}
+                  onSelect={selectLine}
+                />
+              );
+            })}
+          </div>
         )}
       </Paper>
     </Box>
