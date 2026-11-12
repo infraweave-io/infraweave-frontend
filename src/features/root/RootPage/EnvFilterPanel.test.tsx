@@ -412,4 +412,23 @@ describe('EnvFilterPanel', () => {
     expect(screen.getByLabelText('us-west-2')).toBeInTheDocument();
     expect(requestCount).toBe(0);
   });
+
+  it('offers every project’s regions until a project is selected', async () => {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), projects }));
+
+    renderPanel();
+
+    // The region filter sits above the projects, so it is offered before any
+    // project is ticked — once each, though every project shares two of them.
+    const regionBoxes = () =>
+      screen
+        .getAllByRole('checkbox')
+        .map((box) => box.getAttribute('name'))
+        .filter((name) => !name?.endsWith('Account 22'));
+    await waitFor(() => expect(regionBoxes()).toEqual(['eu-central-1', 'us-west-2', 'us-east-1']));
+
+    // Only Dev has us-east-1, so selecting Staging narrows the list to its own.
+    await userEvent.click(screen.getByLabelText('Staging Account 22'));
+    expect(regionBoxes()).toEqual(['eu-central-1', 'us-west-2']);
+  });
 });
