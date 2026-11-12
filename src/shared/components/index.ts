@@ -3,6 +3,7 @@ export * from './DeploymentBadges';
 export * from './SyncBadge';
 export * from './VersionCell';
 export * from './ResourceList';
+export * from './SearchField';
 export * from './ResourcePage';
 export * from './ResourceDetailPage';
 export * from './ResourceInputs';

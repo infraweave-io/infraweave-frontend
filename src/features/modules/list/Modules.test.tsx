@@ -3,6 +3,7 @@ import { Modules } from '.';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ConfigProvider } from '../../../contexts/ConfigContext';
 import { SelectedProjectProvider } from '../../../shared/components/DeploySelectedContext';
@@ -351,6 +352,94 @@ describe('Modules', () => {
     expect(requests).toBe(2);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('repeated next_token'));
     warn.mockRestore();
+  });
+
+  describe('search', () => {
+    const renderedModules = () =>
+      screen
+        .getAllByRole('button', { name: /^(EC2|S3Bucket)$/ })
+        .map((button) => button.textContent);
+
+    it('filters on a subsequence, not just a substring', async () => {
+      renderModules();
+      await screen.findByText('EC2');
+
+      // 's3bkt' is not a substring of "S3Bucket" — only its characters in order.
+      await userEvent.type(screen.getByLabelText('Search modules'), 's3bkt');
+
+      expect(renderedModules()).toEqual(['S3Bucket']);
+      expect(screen.getByText('1 hidden by search')).toBeInTheDocument();
+    });
+
+    it('matches the registry id as well as the displayed name', async () => {
+      renderModules();
+      await screen.findByText('EC2');
+
+      // The table shows "S3Bucket", but `s3bucket` is the name used in manifests.
+      await userEvent.type(screen.getByLabelText('Search modules'), 's3bucket');
+
+      expect(renderedModules()).toEqual(['S3Bucket']);
+    });
+
+    it('orders results by match quality while searching', async () => {
+      // Names chosen so the better match is the alphabetically later one: the
+      // table is sorted by name until something is typed, and sorting by name
+      // while searching would leave the obvious answer below the accident.
+      localStorage.setItem(
+        'infraweave.resource-names.v1.module',
+        JSON.stringify([
+          { module: 'process-data', module_name: 'ProcessData' },
+          { module: 'zprod-app', module_name: 'ZprodApp' },
+        ]),
+      );
+      // Held open so the rows stay the remembered ones, whose names this asserts on.
+      server.use(
+        http.get(
+          `${backendBaseUrl}/api/proxy/api/infraweave/api/v1/modules`,
+          () => new Promise(() => {}),
+        ),
+      );
+
+      renderModules();
+      await screen.findByText('ZprodApp');
+
+      // `prod` is a literal run in ZprodApp and scattered characters in
+      // ProcessData, so it comes first despite sorting last by name.
+      await userEvent.type(screen.getByLabelText('Search modules'), 'prod');
+
+      expect(
+        screen
+          .getAllByRole('button', { name: /^(ProcessData|ZprodApp)$/ })
+          .map((button) => button.textContent),
+      ).toEqual(['ZprodApp', 'ProcessData']);
+    });
+
+    it('says nothing matched rather than claiming the registry is empty', async () => {
+      renderModules();
+      await screen.findByText('EC2');
+
+      await userEvent.type(screen.getByLabelText('Search modules'), 'zzz');
+      expect(screen.queryByText('S3Bucket')).not.toBeInTheDocument();
+      // "No modules found." would read as an empty registry.
+      expect(screen.getByText('No modules match “zzz”.')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByLabelText('Clear search'));
+      expect(renderedModules()).toEqual(['EC2', 'S3Bucket']);
+    });
+
+    it('focuses the field on arrival, so typing filters straight away', async () => {
+      renderModules();
+
+      const search = await screen.findByLabelText('Search modules');
+      expect(search).toHaveFocus();
+    });
+
+    it('offers no search box when there is nothing to search', async () => {
+      renderModules([]);
+
+      await screen.findByText('Select a cloud to browse modules.');
+      expect(screen.queryByLabelText('Search modules')).not.toBeInTheDocument();
+    });
   });
 
   it('names the resource, not the URL, when the request fails', async () => {

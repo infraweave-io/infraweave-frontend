@@ -1,19 +1,9 @@
-import {
-  Box,
-  FormControlLabel,
-  Checkbox,
-  CircularProgress,
-  IconButton,
-  InputAdornment,
-  TextField,
-  Typography,
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Close';
+import { Box, FormControlLabel, Checkbox, CircularProgress, Typography } from '@mui/material';
 
 import React, { useMemo, useState } from 'react';
 import { ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
 import { FilterGroup } from '../../../shared/components/FilterGroup';
+import { SearchField } from '../../../shared/components/SearchField';
 import { useSelectedProjects } from './SelectedProjectsContext';
 import { fuzzyScore } from '../../../utils/fuzzyMatch';
 
@@ -141,29 +131,11 @@ const EnvFilterPanel = () => {
         ))}
       </FilterGroup>
       <FilterGroup label="Projects">
-        <TextField
-          size="small"
+        <SearchField
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={setQuery}
           placeholder="Search projects"
-          // Deliberately not `type="search"`: Chrome and Safari draw their own
-          // clear button for that, which next to the one below made two.
-          inputProps={{ 'aria-label': 'Search projects' }}
           sx={{ mb: 0.5, mt: 0.5 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" color="disabled" />
-              </InputAdornment>
-            ),
-            endAdornment: query ? (
-              <InputAdornment position="end">
-                <IconButton size="small" aria-label="Clear search" onClick={() => setQuery('')}>
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : undefined,
-          }}
         />
         {matches.map(projectCheckbox)}
         {unmatchedPinned.length > 0 && (

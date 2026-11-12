@@ -17,6 +17,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import { MONO_FONT } from '../../contexts/ThemeContext';
 import { shortenVersion } from '../../utils/version';
 import { readCachedNames, writeCachedNames } from '../../utils/resourceNameCache';
+import { fuzzyScore } from '../../utils/fuzzyMatch';
+import { SearchField } from './SearchField';
 
 type ResourceListProps = {
   items: Module[];
@@ -173,7 +175,39 @@ export const ResourceList = ({
     return pending.length > 0 ? [...loadedRows, ...pending].sort(byDisplayName) : loadedRows;
   }, [cachedNames, loadedRows, loading]);
 
-  const data = rows.map((resource) => {
+  const [query, setQuery] = useState('');
+  const searching = query.trim() !== '';
+
+  // Subsequence matching, as on the projects filter: registry names are several
+  // hyphenated words and the parts a user remembers are spread across them, so
+  // `s3ver` should find `s3bucket-versioned`.
+  const visibleRows = useMemo(() => {
+    if (!searching) return rows;
+
+    const scoreOf = (row: ResourceRow) => {
+      // Both names are searchable: the table shows the display name, but the
+      // registry id is what appears in deployment manifests, so it is just as
+      // likely to be what gets typed.
+      const scores = [fuzzyScore(query, row.module_name), fuzzyScore(query, row.module)].filter(
+        (score): score is number => score !== null,
+      );
+      return scores.length > 0 ? Math.max(...scores) : null;
+    };
+
+    return (
+      rows
+        .map((row) => ({ row, score: scoreOf(row) }))
+        .filter((entry): entry is { row: ResourceRow; score: number } => entry.score !== null)
+        // While searching, match quality orders the table instead of the name:
+        // alphabetical order would put the best hit anywhere in the results.
+        .sort((a, b) => b.score - a.score || byDisplayName(a.row, b.row))
+        .map((entry) => entry.row)
+    );
+  }, [rows, query, searching]);
+
+  const hiddenCount = rows.length - visibleRows.length;
+
+  const data = visibleRows.map((resource) => {
     // The API returns one record per (module, track) and these rows collapse them,
     // so a page boundary can fall between two tracks of the same module: a row can
     // be present and still be missing tracks. While pages are arriving no row's
@@ -281,13 +315,41 @@ export const ResourceList = ({
     };
   });
 
+  const plural = resourceType === 'module' ? 'modules' : 'stacks';
+
   return (
     <>
+      {/* Hidden while there is nothing to filter — a search box over "Select a
+          cloud to browse modules." is noise. */}
+      {(rows.length > 0 || searching) && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder={`Search ${plural}`}
+            // Finding one row in a registry of hundreds is what this page is for,
+            // so typing works the moment it appears.
+            autoFocus
+            sx={{ width: 280 }}
+          />
+          {hiddenCount > 0 && visibleRows.length > 0 && (
+            // Otherwise a filtered table looks like the whole registry. Announced
+            // because the rows below it change as the query is typed, with no
+            // other cue.
+            <Typography variant="caption" color="text.secondary" role="status">
+              {hiddenCount} hidden by search
+            </Typography>
+          )}
+        </Box>
+      )}
       <Table
         title={title}
-        emptyContent={emptyContent}
+        emptyContent={
+          // A search that matched nothing is not an empty registry, and the
+          // caller's message ("No modules found.") would read as one.
+          searching && rows.length > 0 ? `No ${plural} match “${query.trim()}”.` : emptyContent
+        }
         options={{
-          search: true,
           paging: false,
           draggable: true,
           columnResizable: true,
