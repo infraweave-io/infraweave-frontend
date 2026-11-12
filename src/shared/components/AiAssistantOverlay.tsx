@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -33,10 +33,9 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PsychologyIcon from '@mui/icons-material/Psychology';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useLocation } from 'react-router-dom';
 import { useConfig } from '../../hooks/useConfig';
+import { ChatMarkdown } from './aiAssistant/ChatMarkdown';
 import { streamChat, type ChatEvent, type LlmMessage } from './aiAssistant/chatTransport';
 
 type ChatRole = 'assistant' | 'user';
@@ -245,6 +244,10 @@ export const AiAssistantOverlay: React.FC = () => {
       previousPathRef.current = location.pathname;
     }
   }, [location.pathname]);
+
+  // The location effect above only sees a change of path, so a link that just changes the query
+  // (a usage page's filters) has to close the chat itself.
+  const closeChat = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return;
@@ -763,9 +766,7 @@ export const AiAssistantOverlay: React.FC = () => {
                                 },
                               }}
                             >
-                              <ReactMarkdown remarkPlugins={[remarkGfm] as any}>
-                                {answer}
-                              </ReactMarkdown>
+                              <ChatMarkdown onNavigate={closeChat}>{answer}</ChatMarkdown>
                             </Box>
                           </>
                         ) : (

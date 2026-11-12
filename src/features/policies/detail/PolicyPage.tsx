@@ -47,7 +47,7 @@ export const PolicyPage = () => {
 
     const json = await response.json();
     return json;
-  }, []);
+  }, [environment, policyName, policyVersion]);
 
   const [selectedTab, setSelectedTab] = useState<number>(0);
 

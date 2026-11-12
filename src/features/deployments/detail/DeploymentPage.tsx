@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTheme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useIsStandalone } from '../../../contexts/ConfigContext';
@@ -54,7 +54,7 @@ const DeletedTitle = ({ text, isDeleted }: DeletedTitleProps) => {
   );
 };
 
-export const DeploymentPage = () => {
+const DeploymentPageContent = () => {
   const navigate = useNavigate();
   const isStandalone = useIsStandalone();
 
@@ -66,11 +66,11 @@ export const DeploymentPage = () => {
     region: string;
   }>();
 
-  const [selectedTab, setSelectedTab] = useState<string>(tab ?? 'overview');
+  // The route owns the tab, so a link to another tab of this deployment shows it too.
+  const selectedTab = tab ?? 'overview';
 
   const handleTabChange = (index: number) => {
     const next = tabs[index];
-    setSelectedTab(next.id);
     navigate(
       `/infraweave/deployment/${project}/${region}/${encodeURIComponent(
         environment ?? '',
@@ -142,4 +142,19 @@ export const DeploymentPage = () => {
       <JobDrawer deployment={value} />
     </Page>
   );
+};
+
+export const DeploymentPage = () => {
+  const { project, region, environment, deploymentId } = useParams<{
+    project: string;
+    region: string;
+    environment: string;
+    deploymentId: string;
+  }>();
+  // A link to another deployment keeps this component mounted, and useDeployment refreshes a
+  // loaded deployment silently, so a failed load would leave the previous one on screen. Keying
+  // by the deployment makes it a fresh load that shows its own loading state and errors. The tab
+  // stays out of the key: switching tabs must not reload.
+  const deployment = [project, region, environment, deploymentId].join('/');
+  return <DeploymentPageContent key={deployment} />;
 };
