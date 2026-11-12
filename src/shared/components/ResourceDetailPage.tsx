@@ -53,7 +53,7 @@ interface ResourceDetailPageProps {
   resourceType: 'module' | 'stack';
 }
 
-export const ResourceDetailPage: React.FC<ResourceDetailPageProps> = ({ resourceType }) => {
+const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resourceType }) => {
   const isModule = resourceType === 'module';
   const versionKey = isModule ? 'moduleVersion' : 'stackVersion';
   const resourceLabel = isModule ? 'module' : 'stack';
@@ -569,4 +569,24 @@ spec:
       )}
     </>
   );
+};
+
+export const ResourceDetailPage: React.FC<ResourceDetailPageProps> = (props) => {
+  const { track, moduleName, moduleVersion, stackName, stackVersion } = useParams<{
+    track: string;
+    moduleName: string;
+    moduleVersion: string;
+    stackName: string;
+    stackVersion: string;
+  }>();
+  // A link to another version of the same kind of page keeps this component mounted. Keying by
+  // the resource gives each one fresh state, so a pick like the third example cannot outlive
+  // the resource it was made on.
+  const resource = [
+    props.resourceType,
+    track,
+    moduleName ?? stackName,
+    moduleVersion ?? stackVersion,
+  ].join('/');
+  return <ResourceDetailPageContent key={resource} {...props} />;
 };
