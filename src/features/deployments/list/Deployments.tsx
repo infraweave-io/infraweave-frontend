@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useConfig } from '../../../hooks/useConfig';
 import { useDeployments } from '../../../hooks/useDeployments';
 import {
@@ -39,6 +39,8 @@ import { StatusSymbol } from '../../../shared/components/StatusSymbol';
 import { VersionCell } from '../../../shared/components/VersionCell';
 import SyncBadge from '../../../shared/components/SyncBadge';
 import { useSelectedProjects } from '../../root/RootPage/SelectedProjectsContext';
+import { SearchField } from '../../../shared/components/SearchField';
+import { bestFuzzyScore, bestSubstringScore } from '../../../utils/fuzzyMatch';
 import { DeploymentPlansModal } from './DeploymentPlansModal';
 import HistoryIcon from '@mui/icons-material/History';
 
@@ -50,6 +52,12 @@ type DenseTableProps = {
   selectedProjectNames: string[];
   selectedRegions: string[];
   isModalOpenRef: React.MutableRefObject<boolean>;
+  /**
+   * Focus the filter on mount. Set on the deployments page, where finding one
+   * row is the whole task; left off where this table is a section of a larger
+   * page, which must not have focus yanked into it.
+   */
+  autoFocusSearch?: boolean;
 };
 
 // Component must be defined outside DenseTable to avoid re-creation on every render
@@ -112,6 +120,7 @@ export const DenseTable = ({
   selectedProjectNames,
   selectedRegions,
   isModalOpenRef,
+  autoFocusSearch = false,
 }: DenseTableProps) => {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -192,7 +201,79 @@ export const DenseTable = ({
     }
   };
 
-  const data = deployments.map((deployment) => {
+  // The account column shows the project's display name, not the id it is keyed
+  // by, so the filter has to resolve it the same way to match on what is read.
+  const accountName = (deployment: Deployment) =>
+    projects.find((p) => p.project_id === deployment.project_id)?.name || deployment.project_id;
+
+  const [query, setQuery] = useState('');
+  const searching = query.trim() !== '';
+
+  // One box for every column, rather than a filter per column: a deployment is
+  // found by whichever detail the user happens to remember — the name, its
+  // module, the namespace, the region, a failing status — and typing it should
+  // just work. Subsequence matching means `ec2dev` finds `ec2_instance_1` in
+  // `dev` without getting the separator right.
+  const visibleDeployments = useMemo(() => {
+    if (!searching) return deployments;
+
+    const scoreOf = (deployment: Deployment) => {
+      const scores = [
+        // What identifies the row, typed from memory and rarely with the
+        // separators right, so a subsequence is what has to match.
+        bestFuzzyScore(query, [
+          // The row shows the last segment of the id; the full one is what a link
+          // or a manifest carries, so both are offered.
+          deployment.deployment_id.split('/').pop(),
+          deployment.deployment_id,
+          deployment.module,
+          deployment.environment,
+        ]),
+        // What the row is filed under, shared by many rows and read off the
+        // screen, so it is matched literally — a subsequence of a long account
+        // name is satisfied by almost anything.
+        // Account is a hidden column by default, and matching it anyway is the
+        // useful way round: "show me my account's rows" should not depend on
+        // first unhiding the column it is written in.
+        bestSubstringScore(query, [
+          accountName(deployment),
+          deployment.region,
+          deployment.status,
+          deployment.module_version,
+        ]),
+      ].filter((score): score is number => score !== null);
+
+      return scores.length > 0 ? Math.max(...scores) : null;
+    };
+
+    return (
+      deployments
+        .map((deployment) => ({ deployment, score: scoreOf(deployment) }))
+        .filter((entry): entry is { deployment: Deployment; score: number } => entry.score !== null)
+        // Best match first. Ties keep the order the rows arrived in, so filtering
+        // on a column every row shares — a region, a status — leaves the list as
+        // it was, minus the rows that dropped out.
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => entry.deployment)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deployments, projects, query, searching]);
+
+  const hiddenCount = deployments.length - visibleDeployments.length;
+  // Terse on purpose: this sits in the table's toolbar between the column chips
+  // and the History button, and a sentence there costs the search box its width.
+  // The query it talks about is in the box right beside it, and "matches" says
+  // the emptiness is the filter's doing rather than an empty account.
+  const searchStatus = !searching
+    ? null
+    : visibleDeployments.length === 0
+      ? 'No matches'
+      : hiddenCount > 0
+        ? // Otherwise a filtered table looks like the whole list.
+          `${hiddenCount} hidden`
+        : null;
+
+  const data = visibleDeployments.map((deployment) => {
     const encodedEnvironment = encodeURIComponent(deployment.environment ?? '');
     const encodedDeploymentId = encodeURIComponent(deployment.deployment_id ?? '');
     const project = deployment.project_id;
@@ -222,8 +303,7 @@ export const DenseTable = ({
           </Typography>
         </Box>
       ),
-      account:
-        projects.find((p) => p.project_id === deployment.project_id)?.name || deployment.project_id,
+      account: accountName(deployment),
       status: (() => {
         const isFailed =
           deployment.status?.toLowerCase().startsWith('failed') ||
@@ -335,6 +415,55 @@ export const DenseTable = ({
               )}
             </Box>
 
+            {/* Between the column controls and the table's own actions: the filter
+                belongs to this table, so it sits in the table's toolbar rather
+                than floating above the card.
+                Hidden while there is nothing to filter, so an empty list is not
+                dressed up as a search that missed. */}
+            {(deployments.length > 0 || searching) && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  // Takes the slack the two fixed groups leave, growing wide on a
+                  // wide window. The small basis is what keeps the row intact: a
+                  // wrap decision is made on basis alone, so asking for the full
+                  // 300px up front pushes Tags and History onto a second line.
+                  flex: '1 1 150px',
+                  minWidth: 0,
+                  // On a narrow window the status drops below the box rather than
+                  // squeezing it down to its adornments.
+                  flexWrap: 'wrap',
+                }}
+              >
+                <SearchField
+                  value={query}
+                  onChange={setQuery}
+                  placeholder="Search deployments"
+                  autoFocus={autoFocusSearch}
+                  // Left edge is fixed and only the right edge moves, so the text
+                  // being typed never slides sideways. The floor keeps a few words
+                  // of the query visible however tight the toolbar gets.
+                  sx={{ flexGrow: 1, flexBasis: 150, minWidth: 150, maxWidth: 300 }}
+                />
+                {/* Announced: the rows change as the query is typed, with no other
+                    cue. Kept here rather than passed to the table as empty
+                    content, which would replace the whole card — this toolbar
+                    included — whenever nothing matched. */}
+                {searchStatus && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    role="status"
+                    sx={{ flexShrink: 0 }}
+                  >
+                    {searchStatus}
+                  </Typography>
+                )}
+              </Box>
+            )}
+
             <Box display="flex" gap={1} alignItems="center">
               <Autocomplete
                 multiple
@@ -368,7 +497,6 @@ export const DenseTable = ({
           </Box>
         }
         options={{
-          search: true,
           paging: false,
           draggable: true,
           columnResizable: true,
@@ -573,6 +701,10 @@ export const Deployments = ({ module }: { module?: string }) => {
       selectedProjectNames={selectedProjectNames}
       selectedRegions={selectedRegions}
       isModalOpenRef={isModalOpenRef}
+      // `module` is only set where this list is one tab of a module or stack
+      // page: there the filter is a section of the page, so it waits to be
+      // clicked into. On the deployments page itself it is the point of the page.
+      autoFocusSearch={!module}
     />
   );
 };

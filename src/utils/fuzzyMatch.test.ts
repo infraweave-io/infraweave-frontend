@@ -1,4 +1,4 @@
-import { fuzzyScore, fuzzyMatches } from './fuzzyMatch';
+import { fuzzyScore, fuzzyMatches, bestFuzzyScore, bestSubstringScore } from './fuzzyMatch';
 
 describe('fuzzyScore', () => {
   it('matches an exact substring', () => {
@@ -62,5 +62,70 @@ describe('fuzzyScore', () => {
     const short = fuzzyScore('abcd', 'abcd-dev')!;
     const long = fuzzyScore('abcd', 'abcd-dev-aws-extra-long-suffix')!;
     expect(short).toBeGreaterThan(long);
+  });
+});
+
+describe('bestFuzzyScore', () => {
+  // A deployment row: name, module, namespace, region.
+  const row = ['ec2_instance_1', 'ec2', 'dev', 'eu-central-1'];
+
+  it('matches on any one field', () => {
+    expect(bestFuzzyScore('instance', row)).not.toBeNull();
+    expect(bestFuzzyScore('eu-central', row)).not.toBeNull();
+  });
+
+  it('scores the field that matches best', () => {
+    // 'dev' is the whole of one field and absent from the rest, so the score is
+    // that field's — not a worse one from a field that happens to match too.
+    expect(bestFuzzyScore('dev', row)).toBe(fuzzyScore('dev', 'dev'));
+  });
+
+  it('does not match characters spread across separate fields', () => {
+    // The point of scoring per field: 'ec2central' is a subsequence of the fields
+    // joined together, but of nothing the user can actually see in one place.
+    expect(bestFuzzyScore('ec2central', row)).toBeNull();
+  });
+
+  it('ignores blank and missing fields', () => {
+    // Rows carry optional columns; an absent one must not become a match.
+    expect(bestFuzzyScore('x', ['', undefined, null])).toBeNull();
+    expect(bestFuzzyScore('dev', ['', undefined, 'dev'])).not.toBeNull();
+  });
+
+  it('treats an empty query as matching everything', () => {
+    // Callers skip filtering entirely when nothing is typed, so this only has to
+    // be harmless — but returning null would hide every row if one ever did not.
+    expect(bestFuzzyScore('', row)).toBe(0);
+    expect(bestFuzzyScore('  ', [])).toBe(0);
+  });
+});
+
+describe('bestSubstringScore', () => {
+  // The wide values rows share: an account name and a status.
+  const row = ['Dev Account 22', 'successful'];
+
+  it('matches a field that contains the query', () => {
+    expect(bestSubstringScore('account', row)).not.toBeNull();
+    // Case-insensitive, and a space in the query is part of the text here rather
+    // than the "any gap" it means to the fuzzy matcher.
+    expect(bestSubstringScore('dev account', row)).not.toBeNull();
+  });
+
+  it('rejects a query the field only contains the scattered letters of', () => {
+    // The reason this variant exists: `ec2` is a subsequence of "Dev Account 22",
+    // so fuzzy-matching an account name matched every row filed under it.
+    expect(bestSubstringScore('ec2', row)).toBeNull();
+    expect(bestFuzzyScore('ec2', row)).not.toBeNull();
+  });
+
+  it('scores on the same scale as the fuzzy matcher, so the two can be compared', () => {
+    // Callers take the best of both over different field sets, which only means
+    // anything if the numbers are comparable.
+    expect(bestSubstringScore('account', row)).toBe(bestFuzzyScore('account', row));
+  });
+
+  it('treats an empty query as matching everything', () => {
+    expect(bestSubstringScore('', row)).toBe(0);
+    expect(bestSubstringScore('  ', [])).toBe(0);
   });
 });

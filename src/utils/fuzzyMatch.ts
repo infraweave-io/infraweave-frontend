@@ -78,4 +78,60 @@ export const fuzzyScore = (query: string, text: string): number | null => {
 export const fuzzyMatches = (query: string, text: string): boolean =>
   fuzzyScore(query, text) !== null;
 
+/**
+ * Scores `query` against a row made of several fields — a deployment's name,
+ * module, namespace, region and so on.
+ *
+ * Each field is scored on its own and the best one wins, rather than scoring the
+ * fields joined into one string: a subsequence may skip anything, so a joined
+ * string matches queries whose characters are scattered across unrelated
+ * columns — `dev` would hit a row whose name merely ends in `d`, whose region
+ * contains an `e` and whose status contains a `v`. Per field, a hit is always a
+ * hit on something the user can point at.
+ *
+ * @returns the best field's score, or `null` when no field matches. Blank and
+ *   missing fields are skipped, so a row of nothing but those matches nothing —
+ *   except an empty query, which matches everything with score 0.
+ */
+export const bestFuzzyScore = (
+  query: string,
+  fields: (string | undefined | null)[],
+): number | null => {
+  if (query.trim().length === 0) return 0;
+
+  const scores = fields
+    .filter((field): field is string => !!field)
+    .map((field) => fuzzyScore(query, field))
+    .filter((score): score is number => score !== null);
+
+  return scores.length > 0 ? Math.max(...scores) : null;
+};
+
+/**
+ * As {@link bestFuzzyScore}, except a field only counts when it literally
+ * contains the query.
+ *
+ * For the wide values many rows share — an account name, a status, a version —
+ * a subsequence is nearly free to satisfy: every row in `Dev Account 22` answers
+ * to `ec2`, so fuzzy-matching them filters nothing out while looking like it
+ * should have. Those are also the values people type out in full or pick off the
+ * screen, so asking for the literal text costs them nothing.
+ *
+ * @returns the best score among the fields that contain the query — on the same
+ *   scale as {@link bestFuzzyScore}, so the two can be compared — or `null` when
+ *   none of them does.
+ */
+export const bestSubstringScore = (
+  query: string,
+  fields: (string | undefined | null)[],
+): number | null => {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return 0;
+
+  return bestFuzzyScore(
+    needle,
+    fields.filter((field) => !!field && field.toLowerCase().includes(needle)),
+  );
+};
+
 export default fuzzyScore;
