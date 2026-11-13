@@ -1384,9 +1384,14 @@ export const LogViewer: React.FC<LogViewerProps> = ({ text, initialState, onStat
     });
   }, [debouncedTerm, filterMode, wordWrap, currentMatchIndex, selectedLine]);
 
+  // Navigating to the match already selected (e.g. the only one) leaves the index unchanged, so
+  // React would skip the render the pending scroll waits for.
+  const [, requestScroll] = React.useReducer((n: number) => n + 1, 0);
+
   const goToMatch = (index: number) => {
     pendingScroll.current = { match: index, smooth: true };
     setCurrentMatchIndex(index);
+    requestScroll();
   };
 
   const goToNextMatch = () => {
