@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { Drawer } from '@mui/material';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Deployment } from '../../../types/Deployment';
@@ -104,10 +104,15 @@ export const useJobDrawer = () => {
     [setParams],
   );
 
+  // Carried along so the job status a link passed survives the viewer rewriting the URL.
+  const routerState = useLocation().state;
   const setLogViewState = useCallback(
     (state: LogViewerState) =>
-      setParams((current) => writeLogViewState(current, state), { replace: true }),
-    [setParams],
+      setParams((current) => writeLogViewState(current, state), {
+        replace: true,
+        state: routerState,
+      }),
+    [setParams, routerState],
   );
 
   return { target, close, logViewState: readLogViewState(params), setLogViewState };
@@ -123,18 +128,29 @@ export const JobDrawer = ({ deployment }: { deployment?: Deployment }) => {
   if (target) last.current = { target, jobStatus };
   const shown = last.current;
 
-  const event: Event | undefined = shown
-    ? {
-        deployment_id: deployment?.deployment_id ?? '',
-        status: shown.jobStatus ?? '',
-        event: shown.target.changeType ?? '',
-        module: deployment?.module ?? '',
-        job_id: shown.target.jobId,
-        initiated_by: '',
-        timestamp: '',
-        epoch: 0,
-      }
-    : undefined;
+  // Kept stable across renders: the logs and changes refetch whenever the event changes, and the
+  // log viewer's search rewrites the URL, which re-renders the drawer.
+  const deploymentId = deployment?.deployment_id ?? '';
+  const module = deployment?.module ?? '';
+  const jobId = shown?.target.jobId;
+  const changeType = shown?.target.changeType ?? '';
+  const shownStatus = shown?.jobStatus ?? '';
+  const event = useMemo<Event | undefined>(
+    () =>
+      jobId
+        ? {
+            deployment_id: deploymentId,
+            status: shownStatus,
+            event: changeType,
+            module,
+            job_id: jobId,
+            initiated_by: '',
+            timestamp: '',
+            epoch: 0,
+          }
+        : undefined,
+    [deploymentId, module, jobId, changeType, shownStatus],
+  );
 
   return (
     <Drawer
@@ -157,8 +173,16 @@ export const JobDrawer = ({ deployment }: { deployment?: Deployment }) => {
     >
       {shown && (
         <DrawerContent
-          // A fresh viewer per job, so one job's search doesn't carry over to the next.
-          key={`${shown.target.jobId}:${shown.target.view}`}
+          // A fresh viewer per job, so one job's search doesn't carry over to the next. The
+          // deployment's scope is included because the requests use it but the event doesn't.
+          key={[
+            deployment?.project_id,
+            deployment?.region,
+            deployment?.environment,
+            deploymentId,
+            shown.target.jobId,
+            shown.target.view,
+          ].join(':')}
           toggleDrawer={(isOpen) => !isOpen && close()}
           event={event}
           deployment={deployment}

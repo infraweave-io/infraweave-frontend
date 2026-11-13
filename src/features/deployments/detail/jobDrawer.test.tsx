@@ -58,6 +58,31 @@ describe('useJobDrawer', () => {
     expect(result.current.target).toBeUndefined();
   });
 
+  it("keeps the link's router state when the log view writes to the URL", () => {
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter
+        initialEntries={[
+          { pathname: '/d', search: '?job=abc&view=logs', state: { jobStatus: 'successful' } },
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    );
+    const { result } = renderHook(() => ({ drawer: useJobDrawer(), location: useLocation() }), {
+      wrapper: Wrapper,
+    });
+    act(() =>
+      result.current.drawer.setLogViewState({
+        search: 'plan:',
+        filter: true,
+        wrap: false,
+        match: 0,
+      }),
+    );
+    expect(result.current.location.search).toBe('?job=abc&view=logs&q=plan%3A');
+    expect(result.current.location.state).toEqual({ jobStatus: 'successful' });
+  });
+
   it('close removes only the drawer params', () => {
     const { result } = renderHook(() => ({ drawer: useJobDrawer(), location: useLocation() }), {
       wrapper: wrapperAt('/d?foo=bar&job=abc&view=changes&type=plan'),
