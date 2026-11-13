@@ -17,7 +17,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { MONO_FONT } from '../../contexts/ThemeContext';
 import { shortenVersion } from '../../utils/version';
 import { readCachedNames, writeCachedNames } from '../../utils/resourceNameCache';
-import { fuzzyScore } from '../../utils/fuzzyMatch';
+import { bestFuzzyScore } from '../../utils/fuzzyMatch';
 import { SearchField } from './SearchField';
 
 type ResourceListProps = {
@@ -184,19 +184,12 @@ export const ResourceList = ({
   const visibleRows = useMemo(() => {
     if (!searching) return rows;
 
-    const scoreOf = (row: ResourceRow) => {
-      // Both names are searchable: the table shows the display name, but the
-      // registry id is what appears in deployment manifests, so it is just as
-      // likely to be what gets typed.
-      const scores = [fuzzyScore(query, row.module_name), fuzzyScore(query, row.module)].filter(
-        (score): score is number => score !== null,
-      );
-      return scores.length > 0 ? Math.max(...scores) : null;
-    };
-
     return (
       rows
-        .map((row) => ({ row, score: scoreOf(row) }))
+        // Both names are searchable: the table shows the display name, but the
+        // registry id is what appears in deployment manifests, so it is just as
+        // likely to be what gets typed.
+        .map((row) => ({ row, score: bestFuzzyScore(query, [row.module_name, row.module]) }))
         .filter((entry): entry is { row: ResourceRow; score: number } => entry.score !== null)
         // While searching, match quality orders the table instead of the name:
         // alphabetical order would put the best hit anywhere in the results.
