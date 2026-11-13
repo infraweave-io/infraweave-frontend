@@ -62,6 +62,13 @@ describe('LogViewer', () => {
     expect(scrolledTo).toContain(container.querySelector('[data-match="1"]'));
   });
 
+  it('scrolls back to the only match when navigating to it', async () => {
+    const { container } = renderViewer({ initialState: { search: 'apply', filter: false } });
+    scrolledTo.length = 0;
+    await userEvent.click(screen.getByTitle('Next match (Enter)'));
+    expect(scrolledTo).toContain(container.querySelector('[data-match="0"]'));
+  });
+
   it('scrolls to the initial line', () => {
     const { container } = renderViewer({ initialState: { line: 3 } });
     expect(scrolledTo).toContain(container.querySelector('[data-line="3"]'));
