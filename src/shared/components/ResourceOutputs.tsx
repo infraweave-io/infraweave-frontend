@@ -3,6 +3,7 @@ import { Card, CardContent, Typography, Box, Chip, IconButton, Tooltip } from '@
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { MarkdownContent } from '../../standalone/components/ComponentAdapter';
 import { formatVariableName, getCopyText } from './ResourceInputs';
+import { useVariableSearch, VariableListHeader } from './VariableSearch';
 
 export interface ResourceOutputsProps {
   outputs?: any[];
@@ -15,16 +16,15 @@ export const ResourceOutputs: React.FC<ResourceOutputsProps> = ({
   view,
   resourceType,
 }) => {
+  const search = useVariableSearch(outputs);
   const title = resourceType === 'module' ? 'Module Outputs' : 'Stack Outputs';
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        {title}
-      </Typography>
-      {outputs?.length ? (
+      <VariableListHeader title={title} noun="outputs" search={search} />
+      {search.visible.length ? (
         <Box display="flex" flexDirection="column" gap={1}>
-          {outputs.map((tf_variable) => {
+          {search.visible.map((tf_variable) => {
             const formattedName = formatVariableName(tf_variable.name, resourceType, view);
 
             return (
@@ -179,7 +179,10 @@ export const ResourceOutputs: React.FC<ResourceOutputsProps> = ({
         </Box>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          No outputs available for this {resourceType}.
+          {/* A search that matched nothing is not a resource without outputs. */}
+          {search.searching && search.total > 0
+            ? `No outputs match “${search.query.trim()}”.`
+            : `No outputs available for this ${resourceType}.`}
         </Typography>
       )}
     </Box>
