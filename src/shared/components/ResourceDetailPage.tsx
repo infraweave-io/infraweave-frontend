@@ -192,20 +192,18 @@ const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resource
         >
           Browse Artifact
         </Button>
-        {isModule && (
-          // Only "Browse Artifact" stays filled: a row of four solid buttons
-          // gives the user no read on which action is the primary one.
-          <Button
-            variant="outlined"
-            startIcon={<CloudQueueIcon />}
-            onClick={() => {
-              setDeploymentsVersion(data.version);
-              setOpenDeployments(true);
-            }}
-          >
-            Deployments
-          </Button>
-        )}
+        {/* Only "Browse Artifact" stays filled: a row of four solid buttons
+            gives the user no read on which action is the primary one. */}
+        <Button
+          variant="outlined"
+          startIcon={<CloudQueueIcon />}
+          onClick={() => {
+            setDeploymentsVersion(data.version);
+            setOpenDeployments(true);
+          }}
+        >
+          Deployments
+        </Button>
       </Box>
     );
   };
@@ -558,13 +556,15 @@ spec:
         </DialogContent>
       </Dialog>
 
-      {/* Module-only: Deployments dialog */}
-      {isModule && (
+      {/* A stack claim is recorded as a deployment under the stack's name, so this covers both.
+          Mounted per opening, so filters, rows and errors do not carry over to the next one. */}
+      {openDeployments && (
         <DeploymentsDialog
           open={openDeployments}
           onClose={() => setOpenDeployments(false)}
           moduleName={resourceName || ''}
           version={deploymentsVersion}
+          resourceType={resourceType}
         />
       )}
     </>

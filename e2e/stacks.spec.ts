@@ -79,6 +79,20 @@ test.describe('Stack detail page', () => {
     });
   });
 
+  test('lists the deployments using this stack version', async ({ page }) => {
+    await page.goto(stackUrl);
+    // Scoped to the page body: the sidebar has a "Deployments" nav item too.
+    await page
+      .getByRole('main')
+      .getByRole('button', { name: 'Deployments' })
+      .click({ timeout: 10000 });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByText('bucket_collection_1').first()).toBeVisible({ timeout: 10000 });
+    // Same version, but a deployment of the ec2 module, not of this stack.
+    await expect(dialog.getByText('ec2_instance_1')).toHaveCount(0);
+  });
+
   test('back button navigates to stacks list', async ({ page }) => {
     await page.goto('/infraweave/stacks');
     await page.getByRole('link', { name: '0.0.15-dev+main.9' }).click();

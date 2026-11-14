@@ -40,6 +40,8 @@ import { VersionCell } from '../../../shared/components/VersionCell';
 import SyncBadge from '../../../shared/components/SyncBadge';
 import { useSelectedProjects } from '../../root/RootPage/SelectedProjectsContext';
 import { SearchField } from '../../../shared/components/SearchField';
+import { ListIncomplete } from '../../../shared/components/ListIncomplete';
+import { INCOMPLETE_REASON_TEXT } from '../../../utils/deploymentFetch';
 import { bestFuzzyScore, bestSubstringScore } from '../../../utils/fuzzyMatch';
 import { DeploymentPlansModal } from './DeploymentPlansModal';
 import HistoryIcon from '@mui/icons-material/History';
@@ -679,7 +681,7 @@ export const Deployments = ({ module }: { module?: string }) => {
   const { selectedProjectNames, projects, selectedRegions } = useSelectedProjects();
   const [_dialogOpen, setDialogOpen] = useState(false);
 
-  const { deployments, loading, error, refetch, isModalOpenRef } = useDeployments(
+  const { deployments, loading, error, incomplete, refetch, isModalOpenRef } = useDeployments(
     projects,
     selectedProjectNames,
     selectedRegions,
@@ -693,19 +695,24 @@ export const Deployments = ({ module }: { module?: string }) => {
   }
 
   return (
-    <DenseTable
-      deployments={deployments}
-      projects={projects}
-      onRefresh={refetch}
-      dialogOpen={setDialogOpen}
-      selectedProjectNames={selectedProjectNames}
-      selectedRegions={selectedRegions}
-      isModalOpenRef={isModalOpenRef}
-      // `module` is only set where this list is one tab of a module or stack
-      // page: there the filter is a section of the page, so it waits to be
-      // clicked into. On the deployments page itself it is the point of the page.
-      autoFocusSearch={!module}
-    />
+    <>
+      <DenseTable
+        deployments={deployments}
+        projects={projects}
+        onRefresh={refetch}
+        dialogOpen={setDialogOpen}
+        selectedProjectNames={selectedProjectNames}
+        selectedRegions={selectedRegions}
+        isModalOpenRef={isModalOpenRef}
+        // `module` is only set where this list is one tab of a module or stack
+        // page: there the filter is a section of the page, so it waits to be
+        // clicked into. On the deployments page itself it is the point of the page.
+        autoFocusSearch={!module}
+      />
+      {incomplete && (
+        <ListIncomplete label="deployments" reason={INCOMPLETE_REASON_TEXT[incomplete]} />
+      )}
+    </>
   );
 };
 

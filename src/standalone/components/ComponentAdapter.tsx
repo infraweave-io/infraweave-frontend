@@ -20,6 +20,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   IconButton,
   Menu,
@@ -61,6 +62,7 @@ import json from 'react-syntax-highlighter/dist/esm/languages/hljs/json';
 import markdown from 'react-syntax-highlighter/dist/esm/languages/hljs/markdown';
 import { githubGist, atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import { MONO_FONT } from '../../contexts/ThemeContext';
+import { SearchField } from '../../shared/components/SearchField';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeMode } from '../../contexts/ThemeContext';
@@ -901,6 +903,7 @@ export interface TableProps<T = any> {
     search?: boolean;
     paging?: boolean;
     pageSize?: number;
+    pageSizeOptions?: number[];
     emptyRowsWhenPaging?: boolean;
     padding?: 'default' | 'dense';
     draggable?: boolean;
@@ -910,8 +913,98 @@ export interface TableProps<T = any> {
   detailPanel?: (rowData: T & { tableData?: { id: number } }) => ReactNode;
 }
 
-export function Table<T = any>({ columns, data, title, emptyContent, detailPanel }: TableProps<T>) {
+const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+/**
+ * Props that carry an element's text when it has no children. Only these, so layout props
+ * such as `size="small"` or `color="error"` do not match every row.
+ */
+const TEXT_PROPS = ['label', 'version', 'title', 'value'];
+
+/**
+ * Callers often put elements straight into fields, so an element is searched by its text,
+ * or failing that by its text props (a version cell's `version`, a chip's `label`).
+ */
+const searchText = (value: unknown): string => {
+  if (value === null || value === undefined || typeof value === 'boolean') return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(searchText).join(' ');
+  if (React.isValidElement(value)) {
+    const props = (value.props ?? {}) as Record<string, unknown>;
+    if (props.children !== undefined) return searchText(props.children);
+    return TEXT_PROPS.map((prop) => searchText(props[prop]))
+      .filter(Boolean)
+      .join(' ');
+  }
+  return '';
+};
+
+/** Off screen, but still read by screen readers. */
+const VISUALLY_HIDDEN = {
+  border: 0,
+  clip: 'rect(0 0 0 0)',
+  height: '1px',
+  margin: '-1px',
+  overflow: 'hidden',
+  padding: 0,
+  position: 'absolute',
+  whiteSpace: 'nowrap',
+  width: '1px',
+} as const;
+
+/** Only columns with a `field` are searched; a `render`-only one has nothing to compare. */
+const rowMatches = <T,>(row: T, columns: TableColumn<T>[], query: string): boolean =>
+  columns.some(
+    (column) =>
+      Boolean(column.field) &&
+      searchText((row as any)[column.field as string])
+        .toLowerCase()
+        .includes(query),
+  );
+
+export function Table<T = any>({
+  columns,
+  data,
+  title,
+  options,
+  emptyContent,
+  detailPanel,
+}: TableProps<T>) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(options?.pageSize ?? DEFAULT_PAGE_SIZE);
+  const [query, setQuery] = useState('');
+
+  const searchable = options?.search === true;
+  const normalisedQuery = query.trim().toLowerCase();
+  // Divider rows have nothing to match, so a search drops them.
+  const rows = React.useMemo(
+    () =>
+      searchable && normalisedQuery
+        ? data.filter(
+            (row) =>
+              (row as any)._divider === undefined && rowMatches(row, columns, normalisedQuery),
+          )
+        : data,
+    [data, columns, searchable, normalisedQuery],
+  );
+
+  const handleQueryChange = (value: string) => {
+    setQuery(value);
+    // Row positions change under a new query, so the page and expanded rows no longer apply.
+    setPage(0);
+    setExpandedRows(new Set());
+  };
+
+  const paging = options?.paging === true;
+  // Clamped rather than reset, so the reader keeps their page while rows stream in. The clamp
+  // is saved, so a page that a filter emptied is not returned to when the filter is cleared.
+  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const currentPage = Math.min(page, pageCount - 1);
+  if (page !== currentPage) setPage(currentPage);
+  const pageStart = paging ? currentPage * rowsPerPage : 0;
+  const visibleRows = paging ? rows.slice(pageStart, pageStart + rowsPerPage) : rows;
 
   const toggleRow = (rowIndex: number) => {
     const newExpandedRows = new Set(expandedRows);
@@ -940,9 +1033,39 @@ export function Table<T = any>({ columns, data, title, emptyContent, detailPanel
       variant="outlined"
       sx={{ borderRadius: 2, overflowX: 'auto' }}
     >
-      {title && (
-        <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
-          {typeof title === 'string' ? <Typography variant="h5">{title}</Typography> : title}
+      {(title || searchable) && (
+        <Box
+          sx={{
+            px: 2,
+            py: 1.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <Box sx={{ flexGrow: 1 }}>
+            {typeof title === 'string' ? <Typography variant="h5">{title}</Typography> : title}
+          </Box>
+          {searchable && (
+            <SearchField
+              value={query}
+              onChange={handleQueryChange}
+              placeholder="Search"
+              ariaLabel="Search table"
+              sx={{ width: 240 }}
+            />
+          )}
+          {searchable && (
+            // Mounted with the search box; a live region added with its text is often not read.
+            <Box role="status" sx={VISUALLY_HIDDEN}>
+              {normalisedQuery &&
+                (rows.length === 0
+                  ? `No rows match "${query.trim()}"`
+                  : `${rows.length} ${rows.length === 1 ? 'row matches' : 'rows match'}`)}
+            </Box>
+          )}
         </Box>
       )}
       <MuiTable stickyHeader>
@@ -957,71 +1080,100 @@ export function Table<T = any>({ columns, data, title, emptyContent, detailPanel
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map((row, rowIndex) => (
-            <React.Fragment key={rowIndex}>
-              {(row as any)._divider !== undefined ? (
-                <TableRow sx={{ '& td': { border: 0 } }}>
-                  <TableCell
-                    colSpan={columns.length + (detailPanel ? 1 : 0)}
-                    sx={{ py: 0.25, px: 2 }}
-                  >
-                    {(row as any)._divider}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <React.Fragment>
-                  <TableRow
-                    hover
-                    sx={{ cursor: detailPanel ? 'pointer' : 'default' }}
-                    onClick={() => detailPanel && toggleRow(rowIndex)}
-                  >
-                    {detailPanel && (
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleRow(rowIndex);
-                          }}
-                        >
-                          {expandedRows.has(rowIndex) ? (
-                            <KeyboardArrowUpIcon />
-                          ) : (
-                            <KeyboardArrowDownIcon />
-                          )}
-                        </IconButton>
-                      </TableCell>
-                    )}
-                    {columns.map((column, colIndex) => (
-                      <TableCell key={colIndex}>
-                        {column.render
-                          ? column.render(row)
-                          : column.field
-                            ? (row as any)[column.field]
-                            : ''}
-                      </TableCell>
-                    ))}
+          {/* Indices stay absolute, so which row is expanded survives a page change. */}
+          {visibleRows.map((row, visibleIndex) => {
+            const rowIndex = pageStart + visibleIndex;
+            return (
+              <React.Fragment key={rowIndex}>
+                {(row as any)._divider !== undefined ? (
+                  <TableRow sx={{ '& td': { border: 0 } }}>
+                    <TableCell
+                      colSpan={columns.length + (detailPanel ? 1 : 0)}
+                      sx={{ py: 0.25, px: 2 }}
+                    >
+                      {(row as any)._divider}
+                    </TableCell>
                   </TableRow>
-                  {detailPanel && (
-                    <TableRow>
-                      <TableCell
-                        style={{ paddingBottom: 0, paddingTop: 0 }}
-                        colSpan={columns.length + 1}
-                      >
-                        <Collapse in={expandedRows.has(rowIndex)} timeout="auto" unmountOnExit>
-                          <Box sx={{ margin: 1 }}>
-                            {detailPanel({ ...row, tableData: { id: rowIndex } })}
-                          </Box>
-                        </Collapse>
-                      </TableCell>
+                ) : (
+                  <React.Fragment>
+                    <TableRow
+                      hover
+                      sx={{ cursor: detailPanel ? 'pointer' : 'default' }}
+                      onClick={() => detailPanel && toggleRow(rowIndex)}
+                    >
+                      {detailPanel && (
+                        <TableCell>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleRow(rowIndex);
+                            }}
+                          >
+                            {expandedRows.has(rowIndex) ? (
+                              <KeyboardArrowUpIcon />
+                            ) : (
+                              <KeyboardArrowDownIcon />
+                            )}
+                          </IconButton>
+                        </TableCell>
+                      )}
+                      {columns.map((column, colIndex) => (
+                        <TableCell key={colIndex}>
+                          {column.render
+                            ? column.render(row)
+                            : column.field
+                              ? (row as any)[column.field]
+                              : ''}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  )}
-                </React.Fragment>
-              )}
-            </React.Fragment>
-          ))}
+                    {detailPanel && (
+                      <TableRow>
+                        <TableCell
+                          style={{ paddingBottom: 0, paddingTop: 0 }}
+                          colSpan={columns.length + 1}
+                        >
+                          <Collapse in={expandedRows.has(rowIndex)} timeout="auto" unmountOnExit>
+                            <Box sx={{ margin: 1 }}>
+                              {detailPanel({ ...row, tableData: { id: rowIndex } })}
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                )}
+              </React.Fragment>
+            );
+          })}
+          {rows.length === 0 && normalisedQuery && (
+            <TableRow>
+              <TableCell
+                colSpan={columns.length + (detailPanel ? 1 : 0)}
+                sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}
+              >
+                No rows match &quot;{query.trim()}&quot;.
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </MuiTable>
+      {paging && (
+        <TablePagination
+          component="div"
+          count={rows.length}
+          page={currentPage}
+          onPageChange={(_, nextPage) => setPage(nextPage)}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={options?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS}
+          onRowsPerPageChange={(event) => {
+            setRowsPerPage(Number(event.target.value));
+            // The old page means nothing under a new page size.
+            setPage(0);
+          }}
+        />
+      )}
     </TableContainer>
   );
 }
