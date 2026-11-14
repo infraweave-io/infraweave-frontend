@@ -20,7 +20,7 @@ test.describe('Navigation', () => {
     await expect(page.getByRole('button', { name: /providers/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /policies/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /projects/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /observability/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /adoption & health/i })).toBeVisible();
   });
 
   test('navigates to Deployments via sidebar', async ({ page }) => {
@@ -59,10 +59,10 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL(/\/infraweave\/projects/);
   });
 
-  test('navigates to Observability via sidebar', async ({ page }) => {
+  test('navigates to Adoption & Health via sidebar', async ({ page }) => {
     await page.goto('/infraweave/overview');
-    await page.getByRole('button', { name: /^observability$/i }).click();
-    await expect(page).toHaveURL(/\/infraweave\/observability/);
+    await page.getByRole('button', { name: /^adoption & health$/i }).click();
+    await expect(page).toHaveURL(/\/infraweave\/adoption-health/);
   });
 
   test('completely unknown routes redirect to overview', async ({ page }) => {
