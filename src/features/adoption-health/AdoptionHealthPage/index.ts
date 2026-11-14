@@ -1,0 +1,1 @@
+export { AdoptionHealthPage } from './AdoptionHealthPage';

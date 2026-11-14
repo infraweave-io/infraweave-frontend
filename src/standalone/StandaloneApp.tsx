@@ -6,6 +6,7 @@ import {
   Navigate,
   useLocation,
   useNavigate,
+  useParams,
 } from 'react-router-dom';
 import {
   CssBaseline,
@@ -87,13 +88,25 @@ const mainNavItems = [
 ];
 
 const analyticsNavItems = [
-  { label: 'Observability', path: '/infraweave/observability', icon: <InsightsIcon /> },
+  { label: 'Adoption & Health', path: '/infraweave/adoption-health', icon: <InsightsIcon />},
 ];
 
 const navSections = [
   { label: 'Infrastructure', items: mainNavItems },
   { label: 'Analytics', items: analyticsNavItems },
 ];
+
+/** Keeps the query and hash, which hold a usage page's selection and filters. */
+const LegacyObservabilityRedirect = () => {
+  const { view } = useParams<{ view: string }>();
+  const { search, hash } = useLocation();
+  return (
+    <Navigate
+      to={{ pathname: `/infraweave/adoption-health${view ? `/${view}` : ''}`, search, hash }}
+      replace
+    />
+  );
+};
 
 const NavigationDrawer: React.FC = () => {
   const location = useLocation();
@@ -326,8 +339,17 @@ export const StandaloneApp: React.FC<StandaloneAppProps> = ({
                                   {/* Main tabs handled by RootPage */}
                                   <Route path="/infraweave/:tab" element={<RootPage />} />
                                   <Route
-                                    path="/infraweave/observability/:view"
+                                    path="/infraweave/adoption-health/:view"
                                     element={<RootPage />}
+                                  />
+                                  {/* Redirects for old Observability links. */}
+                                  <Route
+                                    path="/infraweave/observability"
+                                    element={<LegacyObservabilityRedirect />}
+                                  />
+                                  <Route
+                                    path="/infraweave/observability/:view"
+                                    element={<LegacyObservabilityRedirect />}
                                   />
 
                                   {/* Deployment detail route - with optional tab */}

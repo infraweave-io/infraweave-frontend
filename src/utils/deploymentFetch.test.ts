@@ -1,6 +1,7 @@
 import {
   batchProjectIds,
   fetchDeployments,
+  fetchFleetDeployments,
   fetchModulesGlobally,
   mapWithConcurrency,
 } from './deploymentFetch';
@@ -317,8 +318,8 @@ describe('fetchDeployments', () => {
           progress.push(loaded.map((d) => String(d.deployment_id))),
       });
 
-      // Page 1, page 2, final report. Each is cumulative.
-      expect(progress).toEqual([['a'], ['a', 'b'], ['a', 'b']]);
+      // Start, page 1, page 2, region done, final report. Each is cumulative.
+      expect(progress).toEqual([[], ['a'], ['a', 'b'], ['a', 'b'], ['a', 'b']]);
       expect(deployments.map((d) => d.deployment_id)).toEqual(['a', 'b']);
     });
 
@@ -525,11 +526,131 @@ describe('fetchModulesGlobally', () => {
     warn.mockRestore();
   });
 
+  it('keeps a module loading until every region has answered', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const config = makeConfig();
+    // Only network in r1 answers at once. argocd holds the other five request slots, so
+    // network's remaining regions only start after its first one has finished.
+    const slow = {
+      ...config,
+      fetch: (input: RequestInfo | URL) =>
+        String(input).endsWith('/r1/network')
+          ? config.fetch(input)
+          : gate.then(() => config.fetch(input)),
+    };
+    const regions = ['r1', 'r2', 'r3', 'r4', 'r5'];
+    const networkStates: string[] = [];
+
+    const done = fetchModulesGlobally(slow, {
+      modules: ['argocd', 'network'],
+      regions,
+      onProgress: ({ sources }) => {
+        networkStates.push(sources!.find((source) => source.label === 'network')!.state);
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(networkStates).toContain('loading');
+    expect(networkStates).not.toContain('done');
+
+    release();
+    await done;
+    expect(networkStates.at(-1)).toBe('done');
+  });
+
   it('makes no request when there is nothing to ask for', async () => {
     const config = makeConfig();
 
     expect(await fetchModulesGlobally(config, { modules: [], regions: ['us-west-2'] })).toEqual([]);
     expect(await fetchModulesGlobally(config, { modules: ['argocd'], regions: [] })).toEqual([]);
     expect(config.paths).toEqual([]);
+  });
+});
+
+const withoutFleetRoute = (config: ReturnType<typeof makeConfig>) => ({
+  ...config,
+  fetch: (input: RequestInfo | URL) =>
+    String(input).includes('/fleet/')
+      ? (config.paths.push(String(input)),
+        Promise.resolve({ ok: false, status: 404, headers: new Headers() } as Response))
+      : config.fetch(input),
+});
+
+describe('fetchFleetDeployments', () => {
+  it('asks once per region, with no module list at all', async () => {
+    const config = makeConfig(() => [{ project_id: accounts(1)[0] }]);
+    const loadModules = vi.fn(async () => ['argocd']);
+
+    const result = await fetchFleetDeployments(config, {
+      regions: ['us-west-2', 'eu-central-1'],
+      loadModules,
+    });
+
+    expect(config.paths.sort()).toEqual([
+      'api/proxy/api/infraweave/api/v1/fleet/deployments/eu-central-1',
+      'api/proxy/api/infraweave/api/v1/fleet/deployments/us-west-2',
+    ]);
+    expect(loadModules).not.toHaveBeenCalled();
+    expect(result.deployments).toHaveLength(2);
+    expect(result.mode).toBe('fleet');
+    expect(result.incomplete).toBeUndefined();
+  });
+
+  it('follows x-next-token and reports each region as done', async () => {
+    const config = makeConfig(
+      () => [{ project_id: accounts(1)[0] }],
+      (path) => (path.includes('next_token') ? null : 'page-2'),
+    );
+
+    const result = await fetchFleetDeployments(config, {
+      regions: ['us-west-2'],
+      loadModules: async () => [],
+    });
+
+    expect(result.deployments).toHaveLength(2);
+    expect(result.sources).toEqual([{ label: 'us-west-2', state: 'done', rows: 2, requests: 2 }]);
+  });
+
+  it('falls back to asking per module when the API has no fleet route', async () => {
+    const config = makeConfig((path) =>
+      path.includes('/argocd') ? [{ project_id: accounts(1)[0], module: 'argocd' }] : [],
+    );
+
+    const result = await fetchFleetDeployments(withoutFleetRoute(config), {
+      regions: ['us-west-2'],
+      loadModules: async () => ['argocd', 'network'],
+    });
+
+    expect(result.mode).toBe('per-module');
+    expect(result.deployments.map((d) => d.module)).toEqual(['argocd']);
+    expect(result.sources?.map((s) => [s.label, s.state])).toEqual([
+      ['argocd', 'done'],
+      ['network', 'done'],
+    ]);
+  });
+
+  it('reports a failed region as a short fleet rather than falling back', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = makeConfig(() => [{ project_id: accounts(1)[0] }]);
+    const guarded = {
+      ...config,
+      fetch: (input: RequestInfo | URL) =>
+        String(input).includes('eu-central-1')
+          ? Promise.resolve({ ok: false, status: 503, headers: new Headers() } as Response)
+          : config.fetch(input),
+    };
+    const loadModules = vi.fn(async () => ['argocd']);
+
+    const result = await fetchFleetDeployments(guarded, {
+      regions: ['us-west-2', 'eu-central-1'],
+      loadModules,
+    });
+
+    expect(loadModules).not.toHaveBeenCalled();
+    expect(result.incomplete).toBe('request-failed');
+    expect(result.deployments).toHaveLength(1);
+    warn.mockRestore();
   });
 });

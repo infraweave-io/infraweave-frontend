@@ -195,14 +195,16 @@ const parsePageContext = (pathname: string): PageContext => {
     projects: 'Projects',
   };
 
+  // Before the tab match, which the bare dashboard path would otherwise fall into.
+  const adoptionHealth = pathname.match(/^\/infraweave\/adoption-health(?:\/([^/]+))?\/?$/);
+  if (adoptionHealth) {
+    const view = adoptionHealth[1] ? d(adoptionHealth[1]) : 'dashboard';
+    return { description: `Viewing Adoption & Health (${view} view)` };
+  }
+
   const tab = pathname.match(/^\/infraweave\/([^/]+)$/);
   if (tab && tabNames[tab[1]]) {
     return { description: `Viewing the ${tabNames[tab[1]]} list` };
-  }
-
-  const observability = pathname.match(/^\/infraweave\/observability\/([^/]+)$/);
-  if (observability) {
-    return { description: `Viewing Observability (${d(observability[1])} view)` };
   }
 
   return { description: 'Viewing the InfraWeave dashboard' };
