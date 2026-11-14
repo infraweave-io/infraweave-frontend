@@ -88,7 +88,7 @@ const mainNavItems = [
 ];
 
 const analyticsNavItems = [
-  { label: 'Adoption & Health', path: '/infraweave/adoption-health', icon: <InsightsIcon />},
+  { label: 'Adoption & Health', path: '/infraweave/adoption-health', icon: <InsightsIcon /> },
 ];
 
 const navSections = [
