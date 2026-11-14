@@ -14,6 +14,7 @@ import type { Theme } from '@mui/material/styles';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { MarkdownContent } from '../../standalone/components/ComponentAdapter';
 import camelCase from 'camelcase';
+import { useVariableSearch, VariableListHeader } from './VariableSearch';
 
 export const CustomToggleButton = styled(ToggleButton)(({ theme }: { theme: Theme }) => ({
   '&.Mui-selected': {
@@ -108,23 +109,21 @@ export interface ResourceInputsProps {
   resourceType: 'module' | 'stack';
 }
 
-export const ResourceInputs: React.FC<ResourceInputsProps> = ({ inputs, view, resourceType }) => {
-  const orderedByRequired = inputs?.slice().sort((a, b) => {
-    const aRequired = a.default == null && !a.nullable ? 0 : 1;
-    const bRequired = b.default == null && !b.nullable ? 0 : 1;
-    return aRequired - bRequired;
-  });
+const requiredRank = (variable: any): number =>
+  variable.default == null && !variable.nullable ? 0 : 1;
 
+const byRequired = (a: any, b: any): number => requiredRank(a) - requiredRank(b);
+
+export const ResourceInputs: React.FC<ResourceInputsProps> = ({ inputs, view, resourceType }) => {
+  const search = useVariableSearch(inputs, byRequired);
   const title = resourceType === 'module' ? 'Module Inputs' : 'Stack Inputs';
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        {title}
-      </Typography>
-      {orderedByRequired?.length ? (
+      <VariableListHeader title={title} noun="inputs" search={search} />
+      {search.visible.length ? (
         <Box display="flex" flexDirection="column" gap={1}>
-          {orderedByRequired.map((tf_variable) => {
+          {search.visible.map((tf_variable) => {
             const isRequired = tf_variable.default == null && !tf_variable.nullable;
             const hasDefault = tf_variable.default != null;
             const defaultDisplay = formatDefault(tf_variable.default);
@@ -344,7 +343,10 @@ export const ResourceInputs: React.FC<ResourceInputsProps> = ({ inputs, view, re
         </Box>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          No inputs defined
+          {/* A search that matched nothing is not a resource without inputs. */}
+          {search.searching && search.total > 0
+            ? `No inputs match “${search.query.trim()}”.`
+            : 'No inputs defined'}
         </Typography>
       )}
     </Box>
