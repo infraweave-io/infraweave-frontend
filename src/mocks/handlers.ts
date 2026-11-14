@@ -59,6 +59,15 @@ export const handlers = [
     );
     return HttpResponse.json(result);
   }),
+  // Token-scoped: returns the module's deployments in every project
+  http.get(`${backendBaseUrl}/api/v1/deployments/module/:region/:module`, ({ params }) => {
+    const region = String(params.region);
+    const module = String(params.module);
+    const result = Object.values(DEPLOYMENTS_BY_PROJECT).flatMap((byRegion: any) =>
+      (byRegion[region] ?? []).filter((d: any) => d.module === module),
+    );
+    return HttpResponse.json(result);
+  }),
   ...createHandler('get', '/api/v1/deployment/123808927999/eu-central-1/dev/ec2_instance_1', () =>
     HttpResponse.json(deployments_123808927999_eu_central_1[0]),
   ),
@@ -206,6 +215,17 @@ export const handlers = [
   ),
   // ============= STACKS =============
   ...createHandler('get', '/api/v1/stacks', () => HttpResponse.json(stacks)),
+  ...createHandler('get', '/api/v1/stacks/versions/dev/bucketcollection', () =>
+    HttpResponse.json([
+      stacks[0], // dev 0.0.15-dev+main.9
+    ]),
+  ),
+  ...createHandler('get', '/api/v1/stacks/versions/dev/websiterunner', () =>
+    HttpResponse.json([
+      stacks[1], // dev 0.0.15-dev+main.6
+    ]),
+  ),
+  // Module version endpoints for stacks (some views still use the module path)
   ...createHandler('get', '/api/v1/modules/versions/dev/bucketcollection', () =>
     HttpResponse.json([
       stacks[0], // dev 0.0.15-dev+main.9

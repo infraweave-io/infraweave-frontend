@@ -54,6 +54,7 @@ type ResourceListProps = {
     track?: string;
     hideChanges?: boolean;
     hideTitle?: boolean;
+    resourceType?: 'module' | 'stack';
   }>;
 };
 
@@ -427,6 +428,7 @@ export const ResourceList = ({
                 track={selectedTrack}
                 hideChanges
                 hideTitle
+                resourceType={resourceType}
               />
             </>
           )}

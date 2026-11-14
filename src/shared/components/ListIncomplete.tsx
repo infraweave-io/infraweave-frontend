@@ -4,6 +4,8 @@ import { Alert } from '@mui/material';
 type ListIncompleteProps = {
   /** What was being listed, e.g. `modules`. */
   label: string;
+  /** Overrides the page-cap wording, e.g. when a request failed rather than hit the cap. */
+  reason?: string;
 };
 
 /**
@@ -12,9 +14,10 @@ type ListIncompleteProps = {
  * `usePaginatedItems` exists to fix — so it has to reach the user, not just the
  * console.
  */
-export const ListIncomplete = ({ label }: ListIncompleteProps) => (
+export const ListIncomplete = ({ label, reason }: ListIncompleteProps) => (
   <Alert severity="warning" sx={{ mt: 2 }}>
-    This list is incomplete: loading {label} stopped before the registry was exhausted. Reload to
-    try again.
+    {`This list is incomplete: loading ${label} ${
+      reason ?? 'stopped before the registry was exhausted'
+    }. Reload to try again.`}
   </Alert>
 );

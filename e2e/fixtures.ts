@@ -64,6 +64,18 @@ export async function setupApiMocks(page: Page) {
   // Deployments list
   await page.route('**/api/v1/deployments/**', (r) => json(r, mockDeployments));
 
+  // One module or stack in one region. Registered after the list route, so it wins there.
+  await page.route('**/api/v1/deployments/module/*/*', (r) => {
+    const [region, name] = new URL(r.request().url()).pathname
+      .split('/')
+      .slice(-2)
+      .map(decodeURIComponent);
+    return json(
+      r,
+      mockDeployments.filter((d) => d.region === region && d.module === name),
+    );
+  });
+
   // Single deployment
   await page.route('**/api/v1/deployment/123808927999/us-west-2/dev/bucket_collection_1', (r) =>
     json(r, mockDeployments[0]),

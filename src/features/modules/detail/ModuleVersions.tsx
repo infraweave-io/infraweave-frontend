@@ -31,8 +31,25 @@ import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
 import { ChangesTags } from './VersionDiff';
 import { Deployment } from '../../../types/Deployment';
+import {
+  fetchDeployments,
+  IncompleteReason,
+  INCOMPLETE_REASON_TEXT,
+} from '../../../utils/deploymentFetch';
+import { LoadingMore } from '../../../shared/components/LoadingMore';
+import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import { VersionCell } from '../../../shared/components/VersionCell';
+
+/** Every track a version can be published to. */
+const TRACKS = ['stable', 'beta', 'alpha', 'dev'];
+
+/** Shared empty default, so callers that pass no version list keep a stable identity. */
+const NO_VERSIONS: Module[] = [];
+
+/** A popular module has hundreds of deployments, so all are loaded but one page is rendered. */
+const DEPLOYMENTS_PAGE_SIZE = 50;
+const DEPLOYMENTS_PAGE_SIZES = [25, 50, 100, 250];
 
 type DenseTableProps = {
   modules: Module[];
@@ -215,7 +232,7 @@ export const DenseTable = ({
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box display="flex" alignItems="center">
               <Typography variant="h6" sx={{ mr: 2 }}>
-                {hideTitle ? '' : 'Module Versions'}
+                {hideTitle ? '' : resourceType === 'stack' ? 'Stack Versions' : 'Module Versions'}
               </Typography>
               {onIncludeDev000Change && (
                 <FormControlLabel
@@ -248,7 +265,7 @@ export const DenseTable = ({
               startIcon={<CloudQueueIcon />}
               onClick={() => handleDeploymentsClick('', moduleName || '')}
             >
-              Deployments using this module
+              Deployments using this {resourceType}
             </Button>
           </Box>
         }
@@ -294,6 +311,7 @@ export const DenseTable = ({
           moduleName={moduleName || selectedModuleName}
           version={selectedVersionForDeployments || ''}
           knownVersions={modules}
+          resourceType={resourceType}
         />
       )}
     </>
@@ -305,23 +323,29 @@ export const DeploymentsDialog = ({
   onClose,
   moduleName,
   version,
-  knownVersions = [],
+  knownVersions = NO_VERSIONS,
+  resourceType = 'module',
 }: {
   open: boolean;
   onClose: () => void;
   moduleName: string;
   version: string;
   knownVersions?: Module[];
+  resourceType?: 'module' | 'stack';
 }) => {
   const config = useConfig();
   const [projects, setProjects] = useState<any[]>([]);
+  const [publishedVersions, setPublishedVersions] = useState<Module[]>([]);
   const [availableRegions, setAvailableRegions] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
   const [allDeployments, setAllDeployments] = useState<Deployment[]>([]);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [incomplete, setIncomplete] = useState<IncompleteReason | undefined>(undefined);
+  // Separate, so the deployments effect settling on an empty selection before the projects
+  // arrive does not end the spinner.
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -334,87 +358,153 @@ export const DeploymentsDialog = ({
     }
   }, [open, version]);
 
+  // The filters should offer every published version, not only deployed ones. knownVersions
+  // is limited to one track and the caller's dev000/deprecated toggles, so fetch all tracks.
+  React.useEffect(() => {
+    if (!open || !moduleName) return undefined;
+
+    let cancelled = false;
+    const fetchPublishedVersions = async () => {
+      const fields = ['module', 'module_name', 'track', 'version', 'timestamp'].join(',');
+      const queryParams = `include_dev000=true&include_deprecated=true&fields=${fields}`;
+
+      const results = await Promise.all(
+        TRACKS.map((track) =>
+          config
+            .fetch(
+              config.getApiUrl(
+                `api/proxy/api/infraweave/api/v1/${resourceType}s/versions/${track}/${encodeURIComponent(
+                  moduleName,
+                )}?${queryParams}`,
+              ),
+            )
+            .then((r) => (r.ok ? r.json() : []))
+            .then((json) => {
+              const items = json.Items || json.items || json;
+              return Array.isArray(items) ? (items as Module[]) : [];
+            })
+            .catch(() => [] as Module[]),
+        ),
+      );
+
+      if (!cancelled) setPublishedVersions(results.flat());
+    };
+
+    fetchPublishedVersions();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, moduleName, resourceType, config]);
+
+  // knownVersions and the fetched list can each hold versions the other lacks, so merge them.
+  const allVersions = React.useMemo(() => {
+    const byTrackAndVersion = new Map<string, Module>();
+    for (const mod of [...knownVersions, ...publishedVersions]) {
+      if (!mod?.version) continue;
+      byTrackAndVersion.set(`${mod.track || ''}#${mod.version}`, mod);
+    }
+    return Array.from(byTrackAndVersion.values());
+  }, [knownVersions, publishedVersions]);
+
+  // Deployment records do not always carry the track they were deployed from; fill it in from
+  // the published versions so the track filter can reach them.
+  const trackedDeployments = React.useMemo(
+    () =>
+      allDeployments.map((d) => {
+        if (d.module_track || !d.module_version) return d;
+        const match = allVersions.find((v) => v.version === d.module_version);
+        return match?.track ? { ...d, module_track: match.track } : d;
+      }),
+    [allDeployments, allVersions],
+  );
+
   // Fetch projects and regions on open
   React.useEffect(() => {
-    if (open) {
-      setLoading(true);
-      config
-        .fetch(config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'))
-        .then((response) => {
-          if (!response.ok) throw new Error('Failed to fetch projects');
-          return response.json();
-        })
-        .then((data) => {
-          setProjects(data);
-          const regions = Array.from(
-            new Set(data.flatMap((p: any) => p.regions || [])),
-          ) as string[];
-          setAvailableRegions(regions);
+    if (!open) return undefined;
 
-          // Default select all
-          setSelectedProjectIds(data.map((p: any) => p.project_id));
-          setSelectedRegions(regions);
-        })
-        .catch((err) => setError(err))
-        .finally(() => setLoading(false));
-    }
+    let cancelled = false;
+    setProjectsLoading(true);
+    setError(null);
+    config
+      .fetch(config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'))
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to fetch projects');
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setProjects(data);
+        const regions = Array.from(new Set(data.flatMap((p: any) => p.regions || []))) as string[];
+        setAvailableRegions(regions);
+
+        // Default select all
+        const allProjectIds: string[] = data.map((p: any) => p.project_id);
+        setSelectedProjectIds(allProjectIds);
+        setSelectedRegions(regions);
+        // Set with the selection, so no frame shows "no deployments" before the deployments
+        // effect has started loading them.
+        if (allProjectIds.length > 0 && regions.length > 0) setLoading(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, config]);
 
   // Fetch deployments when filters change
   React.useEffect(() => {
     if (!open || selectedProjectIds.length === 0 || selectedRegions.length === 0) {
-      if (open) setDeployments([]);
-      return;
+      if (open) {
+        setAllDeployments([]);
+        setIncomplete(undefined);
+        // A load this replaced was cancelled and will not clear its own spinner.
+        setLoading(false);
+      }
+      return undefined;
     }
 
-    const fetchDeployments = async () => {
+    // A load spans many requests, so a run replaced by a filter change or a close must stop
+    // asking and stop writing state, or its remaining pages land behind the new run's.
+    const controller = new AbortController();
+    const cancelled = () => controller.signal.aborted;
+
+    const loadDeployments = async () => {
       setLoading(true);
+      setError(null);
+      setAllDeployments([]);
+      setIncomplete(undefined);
       try {
-        const projectIdsString = selectedProjectIds.join(',');
-
-        // Group requests by region (similar to optimizations in Deployments.tsx)
-        const fetchPromises = selectedRegions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/module/${projectIdsString}/${region}/${encodeURIComponent(
-                  moduleName,
-                )}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch((err) => {
-              console.warn(`Failed to fetch deployments for region ${region}`, err);
-              return [];
-            }),
-        );
-
-        const results = await Promise.all(fetchPromises);
-        const deploymentsFound = results.flat().map((d: Deployment) => {
-          if (!d.module_track && knownVersions.length > 0) {
-            const match = knownVersions.find((v) => v.version === d.module_version);
-            if (match && match.track) {
-              return { ...d, module_track: match.track };
-            }
-          }
-          return d;
+        await fetchDeployments(config, {
+          projectIds: selectedProjectIds,
+          regions: selectedRegions,
+          module: moduleName,
+          signal: controller.signal,
+          // Show rows as they arrive so a slow load doesn't look like a hung modal.
+          onProgress: ({ deployments: loaded, incomplete: reason }) => {
+            if (cancelled()) return;
+            setAllDeployments(loaded);
+            setIncomplete(reason);
+          },
         });
-        setAllDeployments(deploymentsFound);
       } catch (err) {
-        setError(err as Error);
+        if (!cancelled()) setError(err as Error);
       } finally {
-        setLoading(false);
+        if (!cancelled()) setLoading(false);
       }
     };
 
-    fetchDeployments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadDeployments();
+    return () => controller.abort();
   }, [open, selectedProjectIds, selectedRegions, moduleName, config]);
 
-  // Filter deployments locally when version selection changes or deployments update
-  React.useEffect(() => {
-    let filtered = allDeployments;
+  // Filter deployments locally when version selection changes or deployments update.
+  const deployments = React.useMemo(() => {
+    let filtered = trackedDeployments;
 
     if (selectedTracks.length > 0) {
       filtered = filtered.filter((d) => selectedTracks.includes(d.module_track || ''));
@@ -424,28 +514,37 @@ export const DeploymentsDialog = ({
       filtered = filtered.filter((d) => selectedVersions.includes(d.module_version || ''));
     }
 
-    setDeployments(filtered);
-  }, [allDeployments, selectedVersions, selectedTracks]);
+    return filtered;
+  }, [trackedDeployments, selectedVersions, selectedTracks]);
 
-  const uniqueTracks = React.useMemo(() => {
-    if (knownVersions.length > 0) {
-      return Array.from(
+  const uniqueTracks = React.useMemo(
+    () =>
+      Array.from(
         new Set(
-          allDeployments
+          trackedDeployments
             .map((d) => d.module_track)
             .filter(Boolean)
-            .concat(knownVersions.map((v) => v.track).filter(Boolean)),
+            .concat(allVersions.map((v) => v.track).filter(Boolean)),
         ),
-      ) as string[];
+      ) as string[],
+    [trackedDeployments, allVersions],
+  );
+
+  // Publish dates, so the version filter can list the newest first.
+  const versionTimestamps = React.useMemo(() => {
+    const timestamps = new Map<string, number>();
+    for (const mod of allVersions) {
+      if (!mod.version || !mod.timestamp) continue;
+      const epoch = new Date(mod.timestamp).getTime();
+      if (Number.isNaN(epoch)) continue;
+      timestamps.set(mod.version, Math.max(epoch, timestamps.get(mod.version) ?? -Infinity));
     }
-    return Array.from(
-      new Set(allDeployments.map((d) => d.module_track).filter(Boolean)),
-    ) as string[];
-  }, [allDeployments, knownVersions]);
+    return timestamps;
+  }, [allVersions]);
 
   const uniqueVersions = React.useMemo(() => {
-    let filtered = allDeployments;
-    let known = knownVersions;
+    let filtered = trackedDeployments;
+    let known = allVersions;
 
     if (selectedTracks.length > 0) {
       filtered = filtered.filter((d) => selectedTracks.includes(d.module_track || ''));
@@ -455,10 +554,21 @@ export const DeploymentsDialog = ({
     const deploymentVersions = filtered.map((d) => d.module_version);
     const knownModuleVersions = known.map((v) => v.version);
 
-    return Array.from(
-      new Set([...deploymentVersions, ...knownModuleVersions].filter(Boolean)),
-    ) as string[];
-  }, [allDeployments, selectedTracks, knownVersions]);
+    return (
+      Array.from(
+        new Set([...deploymentVersions, ...knownModuleVersions].filter(Boolean)),
+      ) as string[]
+    ).sort((a, b) => {
+      const epochA = versionTimestamps.get(a);
+      const epochB = versionTimestamps.get(b);
+      // Versions seen only on a deployment have no publish date, so they go last.
+      if (epochA === undefined && epochB === undefined)
+        return b.localeCompare(a, undefined, { numeric: true });
+      if (epochA === undefined) return 1;
+      if (epochB === undefined) return -1;
+      return epochB - epochA;
+    });
+  }, [trackedDeployments, selectedTracks, allVersions, versionTimestamps]);
 
   const deploymentColumns: TableColumn[] = [
     { title: 'Dep ID', field: 'deployment_id' },
@@ -567,15 +677,45 @@ export const DeploymentsDialog = ({
           </Grid>
         </Grid>
 
-        {loading && <Progress />}
+        {(projectsLoading || loading) && allDeployments.length === 0 && <Progress />}
         {error && <ResponseErrorPanel error={error} />}
-        {!loading && !error && (
+        {!error && allDeployments.length > 0 && (
           <Table
-            title={`Deployments (${deployments?.length || 0})`}
-            options={{ search: true, paging: false }}
+            // "N of M" when filtered, so a small count doesn't read as a load that came up short.
+            title={
+              deployments.length === trackedDeployments.length
+                ? `Deployments (${deployments.length})`
+                : `Deployments (${deployments.length} of ${trackedDeployments.length})`
+            }
+            options={{
+              search: true,
+              paging: true,
+              pageSize: DEPLOYMENTS_PAGE_SIZE,
+              pageSizeOptions: DEPLOYMENTS_PAGE_SIZES,
+              emptyRowsWhenPaging: false,
+            }}
             columns={deploymentColumns}
             data={getDeploymentsData()}
+            emptyContent={
+              loading
+                ? 'No deployments match the current filters yet.'
+                : 'No deployments match the current filters.'
+            }
           />
+        )}
+        {!error && loading && allDeployments.length > 0 && (
+          <LoadingMore label="Loading more deployments..." />
+        )}
+        {!error && !loading && incomplete && (
+          <ListIncomplete label="deployments" reason={INCOMPLETE_REASON_TEXT[incomplete]} />
+        )}
+        {/* A short list already says why it may be empty. */}
+        {!error && !projectsLoading && !loading && !incomplete && allDeployments.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            {selectedProjectIds.length === 0 || selectedRegions.length === 0
+              ? 'Select at least one project and one region to see deployments.'
+              : `No deployments found for this ${resourceType}.`}
+          </Typography>
         )}
       </DialogContent>
     </Dialog>
@@ -620,10 +760,9 @@ export const ModuleVersions = ({
 
     if (allTracks) {
       // Fetch versions from all tracks
-      const tracks = ['stable', 'beta', 'alpha', 'dev'];
       const allVersions: Module[] = [];
 
-      for (const t of tracks) {
+      for (const t of TRACKS) {
         try {
           let url = config.getApiUrl(
             `api/proxy/api/infraweave/api/v1/${resourceType}s/versions/${t}/${module}`,
