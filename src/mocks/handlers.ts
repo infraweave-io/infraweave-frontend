@@ -68,6 +68,14 @@ export const handlers = [
     );
     return HttpResponse.json(result);
   }),
+  // Every deployment in a region, across projects (Adoption & Health views)
+  http.get(`${backendBaseUrl}/api/v1/fleet/deployments/:region`, ({ params }) => {
+    const region = String(params.region);
+    const result = Object.values(DEPLOYMENTS_BY_PROJECT).flatMap(
+      (byRegion: any) => byRegion[region] ?? [],
+    );
+    return HttpResponse.json(result);
+  }),
   ...createHandler('get', '/api/v1/deployment/123808927999/eu-central-1/dev/ec2_instance_1', () =>
     HttpResponse.json(deployments_123808927999_eu_central_1[0]),
   ),

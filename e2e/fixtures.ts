@@ -76,6 +76,15 @@ export async function setupApiMocks(page: Page) {
     );
   });
 
+  // Fleet overview, one region per request
+  await page.route('**/api/v1/fleet/deployments/*', (r) => {
+    const region = new URL(r.request().url()).pathname.split('/').pop();
+    return json(
+      r,
+      mockDeployments.filter((d) => d.region === region),
+    );
+  });
+
   // Single deployment
   await page.route('**/api/v1/deployment/123808927999/us-west-2/dev/bucket_collection_1', (r) =>
     json(r, mockDeployments[0]),
@@ -151,7 +160,7 @@ export async function setupApiMocks(page: Page) {
   // Single provider
   await page.route('**/api/v1/provider/**', (r) => json(r, mockProviders[0]));
 
-  // Observability / metrics endpoints — return empty to avoid errors
+  // Metrics / stats endpoints return empty to avoid errors
   await page.route('**/api/v1/metrics/**', (r) => json(r, []));
   await page.route('**/api/v1/stats/**', (r) => json(r, {}));
 }

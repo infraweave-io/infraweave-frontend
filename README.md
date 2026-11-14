@@ -79,7 +79,7 @@ src/
 │   ├── deployments/
 │   ├── graph/          # xyflow-based dependency graph
 │   ├── modules/ stacks/ policies/ providers/
-│   ├── observability/
+│   ├── adoption-health/
 │   ├── overview/
 │   └── root/           # App shell, routes, layout
 ├── standalone/         # Standalone entry point (StandaloneApp + mount)

@@ -9,6 +9,8 @@
 
 import { decodeJwtPayload, getProvider, refreshTokens } from './oauth';
 import { clearResourceNameCache } from './resourceNameCache';
+import { clearProjectCache } from './projectCache';
+import { clearFleetCache } from './fleetCache';
 
 const EXPIRY_SKEW_SECONDS = 60;
 
@@ -42,13 +44,38 @@ const isExpiringSoon = (jwt: string, skewSeconds = EXPIRY_SKEW_SECONDS): boolean
   return exp - nowSeconds <= skewSeconds;
 };
 
-const clearAuthAndRedirect = () => {
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-  localStorage.removeItem('user');
-  localStorage.removeItem('selectedRegions');
+/**
+ * Stored for the signed-in user only: tokens and every persisted selection. The caches are
+ * cleared by their own functions in `clearSession`. `theme_mode` and `__app_mode__` belong
+ * to the device, so they stay.
+ */
+const SESSION_KEYS = [
+  'auth_token',
+  'access_token',
+  'refresh_token',
+  'user',
+  'oauth_state',
+  'selectedProviders',
+  'selectedProjectNames',
+  'selectedRegions',
+  'selectedProjectName',
+  'selectedRegion',
+  'selectedRepositoryData',
+];
+
+/**
+ * Called however a session ends (sign-out, a 401 a refresh could not fix, a failed refresh),
+ * so the next user in this browser inherits nothing from the last one.
+ */
+export const clearSession = (): void => {
+  for (const key of SESSION_KEYS) localStorage.removeItem(key);
   clearResourceNameCache();
+  clearProjectCache();
+  clearFleetCache();
+};
+
+const clearAuthAndRedirect = () => {
+  clearSession();
   window.location.href = '/';
 };
 

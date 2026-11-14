@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 import { Env } from '../utils/env';
-import { ensureFreshAuthToken, forceRefreshAuthToken } from '../utils/authToken';
-import { clearResourceNameCache } from '../utils/resourceNameCache';
+import { clearSession, ensureFreshAuthToken, forceRefreshAuthToken } from '../utils/authToken';
 
 export interface AppConfig {
   backendBaseUrl: string;
@@ -118,12 +117,7 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
               response = await fetch(input, buildRequest(refreshed));
             }
             if (response.status === 401) {
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('access_token');
-              localStorage.removeItem('refresh_token');
-              localStorage.removeItem('user');
-              localStorage.removeItem('selectedRegions');
-              clearResourceNameCache();
+              clearSession();
               window.location.href = '/';
             }
           }
