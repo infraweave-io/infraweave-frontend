@@ -23,17 +23,18 @@ import CloudFilterPanel from './CloudFilterPanel';
 import { SelectedProjectsProvider } from './SelectedProjectsContext';
 import { SelectedProvidersProvider } from './SelectedProvidersContext';
 import { Projects } from './Projects';
-import { ObservabilityPage } from '../../observability';
+import { AdoptionHealthPage } from '../../adoption-health';
 
+/** `id` is the URL segment, since a label like "Adoption & Health" cannot be one. */
 const tabs = [
-  { label: 'Overview' },
-  { label: 'Deployments' },
-  { label: 'Stacks' },
-  { label: 'Modules' },
-  { label: 'Providers' },
-  { label: 'Policies' },
-  { label: 'Projects' },
-  { label: 'Observability' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'deployments', label: 'Deployments' },
+  { id: 'stacks', label: 'Stacks' },
+  { id: 'modules', label: 'Modules' },
+  { id: 'providers', label: 'Providers' },
+  { id: 'policies', label: 'Policies' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'adoption-health', label: 'Adoption & Health' },
 ];
 
 interface TabLayoutProps {
@@ -76,16 +77,16 @@ export const RootPage = () => {
   useEffect(() => {
     if (tab) {
       setSelectedTab(tab);
-    } else if (pathname.includes('/infraweave/observability')) {
-      setSelectedTab('observability');
+    } else if (pathname.includes('/infraweave/adoption-health')) {
+      setSelectedTab('adoption-health');
     }
   }, [tab, pathname]);
 
   const navigate = useNavigate();
   const handleTabChange = (index: number) => {
-    const tabLabel = tabs[index].label.toLowerCase();
-    setSelectedTab(tabLabel);
-    navigate(`/infraweave/${tabLabel}`);
+    const tabId = tabs[index].id;
+    setSelectedTab(tabId);
+    navigate(`/infraweave/${tabId}`);
   };
 
   const renderTabContent = () => {
@@ -160,8 +161,8 @@ export const RootPage = () => {
             <Projects />
           </TabLayout>
         );
-      case 'observability':
-        return <ObservabilityPage />;
+      case 'adoption-health':
+        return <AdoptionHealthPage />;
       default:
         return (
           <InfoCard title="Nothing here">
@@ -179,7 +180,10 @@ export const RootPage = () => {
         <Page themeId="tool">
           {!isStandalone && (
             <HeaderTabs
-              selectedIndex={tabs.findIndex((t) => t.label.toLowerCase() === selectedTab) ?? 0}
+              selectedIndex={Math.max(
+                0,
+                tabs.findIndex((t) => t.id === selectedTab),
+              )}
               onChange={handleTabChange}
               tabs={tabs.map(({ label }, index) => ({
                 id: index.toString(),

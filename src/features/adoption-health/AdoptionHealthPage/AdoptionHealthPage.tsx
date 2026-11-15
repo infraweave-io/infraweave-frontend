@@ -1236,7 +1236,7 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
 };
 
 /**
- * Entry tile for one observability view.
+ * Entry tile for one Adoption & Health view.
  *
  * Left-aligned with a small tinted glyph: the previous 60px centred icons read
  * as marketing tiles, and two of the three used the same red shield, which
@@ -1287,8 +1287,8 @@ const DashboardCard = ({
   </Card>
 );
 
-export const ObservabilityPage = () => {
-  // In standalone, this component is rendered inside RootPage which is at /infraweave/observability or /infraweave/observability/:view
+export const AdoptionHealthPage = () => {
+  // In standalone, this component is rendered inside RootPage which is at /infraweave/adoption-health or /infraweave/adoption-health/:view
   // We can use the 'view' param from the router if available.
   const { view } = useParams<{ view: string }>();
   const navigate = useNavigate();
@@ -1298,9 +1298,9 @@ export const ObservabilityPage = () => {
 
   const handleNavigate = (targetView: string) => {
     if (targetView === 'dashboard') {
-      navigate('/infraweave/observability');
+      navigate('/infraweave/adoption-health');
     } else {
-      navigate(`/infraweave/observability/${targetView}`);
+      navigate(`/infraweave/adoption-health/${targetView}`);
     }
   };
 
@@ -1328,8 +1328,8 @@ export const ObservabilityPage = () => {
   return (
     <Box>
       <PageHeading
-        title="Observability"
-        description="Monitor your infrastructure, analyze usage patterns, and detect issues."
+        title="Adoption & Health"
+        description="Which module and stack versions are deployed where, and which deployments are failing."
       />
       <Grid container spacing={2.5}>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>

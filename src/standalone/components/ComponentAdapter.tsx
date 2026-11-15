@@ -66,8 +66,8 @@ import { SearchField } from '../../shared/components/SearchField';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeMode } from '../../contexts/ThemeContext';
-import { clearResourceNameCache } from '../../utils/resourceNameCache';
 import { useDebounce } from '../../hooks/useDebounce';
+import { clearSession } from '../../utils/authToken';
 
 SyntaxHighlighter.registerLanguage('yaml', yaml);
 SyntaxHighlighter.registerLanguage('json', json);
@@ -271,10 +271,7 @@ export const StandaloneAppBar: React.FC<StandaloneAppBarProps> = ({ title }) => 
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('oauth_state');
-    clearResourceNameCache();
+    clearSession();
     handleMenuClose();
     window.location.href = '/';
   };
