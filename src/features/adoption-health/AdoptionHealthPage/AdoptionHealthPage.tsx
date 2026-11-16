@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useConfig } from '../../../hooks/useConfig';
 import {
   Progress,
@@ -34,6 +34,8 @@ import {
 } from '@mui/material';
 import ModuleIcon from '@mui/icons-material/Extension';
 import StackIcon from '@mui/icons-material/Layers';
+import RegionIcon from '@mui/icons-material/Public';
+import AccountIcon from '@mui/icons-material/Folder';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -50,6 +52,15 @@ import { DeploymentsDialog } from '../../modules/detail/ModuleVersions';
 import { ModuleOverview } from './ModuleOverview';
 import { isStackDeployment, moduleName, useFleetDeployments } from './useFleetDeployments';
 import { scrollToSection } from './OverviewParts';
+import { BreakdownView } from './BreakdownView';
+import {
+  ContextFilters,
+  filterSummary,
+  matchesFilters,
+  usageHref,
+  useScrollToOpenedSelection,
+  useUsageContext,
+} from './usageContext';
 import { FleetGate } from './FleetStatus';
 import { UsageRanking } from './UsageRanking';
 
@@ -85,7 +96,14 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
   const fleet = useFleetDeployments();
   const { projectNames } = fleet;
   const label = KIND_LABEL[kind];
-  const [selectedName, setSelectedName] = useState('');
+  // Selection and filters live in the URL so other pages can deep-link to a drill-down.
+  const { context, set } = useUsageContext();
+  const selectedName = context.module ?? '';
+  const setSelectedName = (name: string) => set('module', name || undefined);
+  const filters = React.useMemo(
+    () => ({ region: context.region, account: context.account }),
+    [context.region, context.account],
+  );
   const overviewRef = React.useRef<HTMLDivElement>(null);
 
   // Filters
@@ -107,16 +125,23 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
     [fleet.stackCatalogue],
   );
   const kindDeployments = React.useMemo(
-    () => fleet.deployments.filter((d) => isStackDeployment(d, stackNames) === (kind === 'stack')),
-    [fleet.deployments, stackNames, kind],
+    () =>
+      fleet.deployments.filter(
+        (d) =>
+          isStackDeployment(d, stackNames) === (kind === 'stack') && matchesFilters(d, filters),
+      ),
+    [fleet.deployments, stackNames, kind, filters],
   );
-  // Registry entries plus anything deployed under a name the registry no longer has.
+  // Registry entries plus anything deployed under a name the registry no longer has, and
+  // the name a link opened the page with, even before (or if never) it turns up.
   const options = React.useMemo(
     () =>
       Array.from(
-        new Set([...registered, ...kindDeployments.map((d) => d.module).filter(Boolean)]),
+        new Set(
+          [...registered, ...kindDeployments.map((d) => d.module), selectedName].filter(Boolean),
+        ),
       ).sort(),
-    [registered, kindDeployments],
+    [registered, kindDeployments, selectedName],
   );
 
   const rawDeployments = React.useMemo(
@@ -135,6 +160,9 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
     setSelectedName(name);
     scrollToSection(overviewRef);
   };
+  useScrollToOpenedSelection(selectedName, fleet.fetchedAt > 0 && fleet.accessKnown, () =>
+    scrollToSection(overviewRef),
+  );
 
   // Reset filters on selection change
   useEffect(() => {
@@ -202,6 +230,11 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
           fleet={fleet}
           scope={{ deployments: kindDeployments, noun: `${kind} deployment` }}
         >
+          <ContextFilters
+            filters={filters}
+            projectNames={projectNames}
+            onClear={(key) => set(key, undefined)}
+          />
           <Card variant="outlined" sx={{ width: '100%', mb: 3 }}>
             <CardHeader
               title={`Most deployed ${kind}s`}
@@ -210,8 +243,8 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
             />
             <CardContent>
               <Typography variant="body1" paragraph>
-                Every {kind} in the registry, by number of active deployments across all accounts.
-                Select one to see where it runs and on which versions.
+                Every {kind} in the registry, by number of active deployments. Select one to see
+                where it runs and on which versions.
               </Typography>
               <UsageRanking
                 kind={kind}
@@ -227,12 +260,13 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
           <Card ref={overviewRef} variant="outlined" sx={{ width: '100%', mb: 3 }}>
             <CardHeader
               title={`${label} Fleet Overview`}
+              subheader={filterSummary(filters, projectNames)}
               titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
               sx={{ borderBottom: 1, borderColor: 'divider' }}
             />
             <CardContent>
               <Typography variant="body1" paragraph>
-                Pick a {kind} to see its deployments across all accounts and regions.
+                Pick a {kind} to see its deployments by account and region.
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, mb: selectedName ? 3 : 0 }}>
                 <Autocomplete
@@ -252,6 +286,14 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
                   deployments={rawDeployments}
                   projectNames={projectNames}
                   onVersionClick={handleVersionClick}
+                  accountHref={(projectId) =>
+                    usageHref('account-usage', {
+                      account: projectId,
+                      module: selectedName,
+                      kind,
+                      region: filters.region,
+                    })
+                  }
                 />
               )}
             </CardContent>
@@ -376,6 +418,8 @@ const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) =>
               moduleName={selectedName}
               version={selectedVersionForModal}
               resourceType={kind}
+              initialProjectIds={filters.account ? [filters.account] : undefined}
+              initialRegions={filters.region ? [filters.region] : undefined}
             />
           )}
         </FleetGate>
@@ -1023,6 +1067,7 @@ export const AdoptionHealthPage = () => {
   // In standalone, this component is rendered inside RootPage which is at /infraweave/adoption-health or /infraweave/adoption-health/:view
   // We can use the 'view' param from the router if available.
   const { view } = useParams<{ view: string }>();
+  const { search, hash } = useLocation();
   const navigate = useNavigate();
 
   // Default to dashboard
@@ -1036,17 +1081,28 @@ export const AdoptionHealthPage = () => {
     }
   };
 
-  // Legacy route for the combined modules and stacks page.
+  // Legacy route for the combined modules and stacks page. The query holds its selection.
   if (subView === 'usage') {
-    return <Navigate to="/infraweave/adoption-health/module-usage" replace />;
+    return (
+      <Navigate
+        to={{ pathname: '/infraweave/adoption-health/module-usage', search, hash }}
+        replace
+      />
+    );
   }
 
   if (subView === 'module-usage' || subView === 'stack-usage') {
     const kind: UsageKind = subView === 'stack-usage' ? 'stack' : 'module';
     return (
-      // Keyed so switching views resets the selection.
+      // Keyed so switching views starts from fresh local state; the selection is in the URL.
       <UsageView key={kind} kind={kind} onBack={() => handleNavigate('dashboard')} />
     );
+  }
+
+  if (subView === 'region-usage' || subView === 'account-usage') {
+    const by = subView === 'region-usage' ? 'region' : 'account';
+    // Keyed so switching views starts from fresh local state; the selection is in the URL.
+    return <BreakdownView key={by} by={by} onBack={() => handleNavigate('dashboard')} />;
   }
 
   if (subView === 'velocity') {
@@ -1068,7 +1124,7 @@ export const AdoptionHealthPage = () => {
         description="Which module and stack versions are deployed where, and which deployments are failing."
       />
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <DashboardCard
             icon={<ModuleIcon />}
             tone="primary"
@@ -1078,13 +1134,23 @@ export const AdoptionHealthPage = () => {
           />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <DashboardCard
             icon={<StackIcon />}
             tone="primary"
             title="Stack Usage"
             description="Which stacks are deployed, where, and on which versions. Track adoption of new stack versions."
             onClick={() => handleNavigate('stack-usage')}
+          />
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DashboardCard
+            icon={<RegionIcon />}
+            tone="primary"
+            title="Region Usage"
+            description="How much runs in each region, and which modules, stacks and accounts are behind it."
+            onClick={() => handleNavigate('region-usage')}
           />
 
           {/* Velocity Card */}
@@ -1106,7 +1172,17 @@ export const AdoptionHealthPage = () => {
             </Grid> */}
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DashboardCard
+            icon={<AccountIcon />}
+            tone="primary"
+            title="Account Usage"
+            description="What each account runs, on which versions and in which regions, and what is failing there."
+            onClick={() => handleNavigate('account-usage')}
+          />
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <DashboardCard
             icon={<MonitorHeartIcon />}
             tone="success"
@@ -1116,7 +1192,7 @@ export const AdoptionHealthPage = () => {
           />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <DashboardCard
             icon={<ReportProblemIcon />}
             tone="warning"

@@ -325,6 +325,8 @@ export const DeploymentsDialog = ({
   version,
   knownVersions = NO_VERSIONS,
   resourceType = 'module',
+  initialProjectIds,
+  initialRegions,
 }: {
   open: boolean;
   onClose: () => void;
@@ -332,6 +334,9 @@ export const DeploymentsDialog = ({
   version: string;
   knownVersions?: Module[];
   resourceType?: 'module' | 'stack';
+  /** Starting selection when opened from a narrowed view. Omitted, everything is selected. */
+  initialProjectIds?: string[];
+  initialRegions?: string[];
 }) => {
   const config = useConfig();
   const [projects, setProjects] = useState<any[]>([]);
@@ -418,6 +423,11 @@ export const DeploymentsDialog = ({
     [allDeployments, allVersions],
   );
 
+  // By value, so a caller passing a fresh array each render does not refetch the projects.
+  // Undefined when not given, which is not the same as given and empty.
+  const initialProjectsKey = initialProjectIds?.join(',');
+  const initialRegionsKey = initialRegions?.join(',');
+
   // Fetch projects and regions on open
   React.useEffect(() => {
     if (!open) return undefined;
@@ -437,13 +447,23 @@ export const DeploymentsDialog = ({
         const regions = Array.from(new Set(data.flatMap((p: any) => p.regions || []))) as string[];
         setAvailableRegions(regions);
 
-        // Default select all
+        // Start from the caller's accounts and regions, else from everything. An account or
+        // region the caller asked for that is not visible is left out, so a stale link
+        // selects nothing rather than widening the view.
         const allProjectIds: string[] = data.map((p: any) => p.project_id);
-        setSelectedProjectIds(allProjectIds);
-        setSelectedRegions(regions);
+        const startProjects =
+          initialProjectsKey === undefined
+            ? allProjectIds
+            : allProjectIds.filter((id) => initialProjectsKey.split(',').includes(id));
+        const startRegions =
+          initialRegionsKey === undefined
+            ? regions
+            : regions.filter((region) => initialRegionsKey.split(',').includes(region));
+        setSelectedProjectIds(startProjects);
+        setSelectedRegions(startRegions);
         // Set with the selection, so no frame shows "no deployments" before the deployments
         // effect has started loading them.
-        if (allProjectIds.length > 0 && regions.length > 0) setLoading(true);
+        if (startProjects.length > 0 && startRegions.length > 0) setLoading(true);
       })
       .catch((err) => {
         if (!cancelled) setError(err);
@@ -454,7 +474,7 @@ export const DeploymentsDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [open, config]);
+  }, [open, config, initialProjectsKey, initialRegionsKey]);
 
   // Fetch deployments when filters change
   React.useEffect(() => {

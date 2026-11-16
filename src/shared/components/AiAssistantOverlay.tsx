@@ -123,7 +123,7 @@ interface PageContext {
   track?: string;
 }
 
-const parsePageContext = (pathname: string): PageContext => {
+const parsePageContext = (pathname: string, search = ''): PageContext => {
   const d = (s: string) => decodeURIComponent(s);
 
   const deployment = pathname.match(
@@ -199,7 +199,16 @@ const parsePageContext = (pathname: string): PageContext => {
   const adoptionHealth = pathname.match(/^\/infraweave\/adoption-health(?:\/([^/]+))?\/?$/);
   if (adoptionHealth) {
     const view = adoptionHealth[1] ? d(adoptionHealth[1]) : 'dashboard';
-    return { description: `Viewing Adoption & Health (${view} view)` };
+    // The usage pages keep their selection and filters in the query.
+    const params = new URLSearchParams(search);
+    const narrowed = ['module', 'region', 'account']
+      .filter((key) => params.get(key))
+      .map((key) => `${key} ${params.get(key)}`);
+    return {
+      description: `Viewing Adoption & Health (${view} view${
+        narrowed.length > 0 ? `, ${narrowed.join(', ')}` : ''
+      })`,
+    };
   }
 
   const tab = pathname.match(/^\/infraweave\/([^/]+)$/);
@@ -389,7 +398,7 @@ export const AiAssistantOverlay: React.FC = () => {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    const pageContext = parsePageContext(location.pathname);
+    const pageContext = parsePageContext(location.pathname, location.search);
     // Scoped to this turn: only merged into historyRef.current once the
     // turn finishes without throwing, without an error/truncated event,
     // AND with a `done` event actually observed. A stream that ends (loop

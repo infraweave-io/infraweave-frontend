@@ -25,6 +25,7 @@ import {
   statusTone,
   TABLE_MAX_HEIGHT,
 } from './OverviewParts';
+import { UsageLink } from './usageContext';
 
 type VersionRow = {
   version: string;
@@ -156,7 +157,7 @@ const summarize = (deployments: Deployment[]): Summary => {
 };
 
 export type ModuleOverviewProps = {
-  /** Rows for one module or stack, across every account and region the caller can see. */
+  /** Rows for one module or stack, in the accounts and regions the page is showing. */
   deployments: Deployment[];
   /** What the rows are deployments of, for the wording. */
   kind?: 'module' | 'stack';
@@ -164,6 +165,8 @@ export type ModuleOverviewProps = {
   projectNames?: Record<string, string>;
   /** Opens the deployment list for one version, when the page offers that drill-in. */
   onVersionClick?: (version: string) => void;
+  /** Where an account's name leads, when the page offers that drill-down. */
+  accountHref?: (projectId: string) => string;
 };
 
 export const ModuleOverview = ({
@@ -171,6 +174,7 @@ export const ModuleOverview = ({
   kind = 'module',
   projectNames = {},
   onVersionClick,
+  accountHref,
 }: ModuleOverviewProps) => {
   const summary = React.useMemo(() => summarize(deployments), [deployments]);
 
@@ -312,7 +316,15 @@ export const ModuleOverview = ({
                   <TableRow key={row.projectId} hover>
                     <TableCell component="th" scope="row">
                       <Tooltip title={row.projectId}>
-                        <span>{projectNames[row.projectId] ?? row.projectId}</span>
+                        <span>
+                          {accountHref ? (
+                            <UsageLink to={accountHref(row.projectId)}>
+                              {projectNames[row.projectId] ?? row.projectId}
+                            </UsageLink>
+                          ) : (
+                            projectNames[row.projectId] ?? row.projectId
+                          )}
+                        </span>
                       </Tooltip>
                     </TableCell>
                     <TableCell align="right">{row.count}</TableCell>
