@@ -13,14 +13,14 @@ test.describe('Navigation', () => {
 
   test('renders sidebar with all navigation items', async ({ page }) => {
     await page.goto('/infraweave/overview');
-    await expect(page.getByRole('button', { name: /overview/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /deployments/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /stacks/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /modules/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /providers/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /policies/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /projects/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /adoption & health/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^deployments$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^stacks$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^modules$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^providers$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^policies$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^projects$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^adoption & health$/i })).toBeVisible();
   });
 
   test('navigates to Deployments via sidebar', async ({ page }) => {
