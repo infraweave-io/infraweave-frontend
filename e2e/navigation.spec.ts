@@ -65,6 +65,16 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL(/\/infraweave\/adoption-health/);
   });
 
+  test('the combined usage page redirects to module usage', async ({ page }) => {
+    await page.goto('/infraweave/adoption-health/usage');
+    await expect(page).toHaveURL(/\/infraweave\/adoption-health\/module-usage$/);
+  });
+
+  test('old observability links redirect to Adoption & Health', async ({ page }) => {
+    await page.goto('/infraweave/observability/health');
+    await expect(page).toHaveURL(/\/infraweave\/adoption-health\/health$/);
+  });
+
   test('completely unknown routes redirect to overview', async ({ page }) => {
     await page.goto('/completely/unknown/path');
     await expect(page).toHaveURL(/\/infraweave\/overview/);

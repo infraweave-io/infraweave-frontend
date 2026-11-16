@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useConfig } from '../../../hooks/useConfig';
 import {
   Progress,
@@ -32,8 +32,8 @@ import {
   MenuItem,
   alpha,
 } from '@mui/material';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import ModuleIcon from '@mui/icons-material/Extension';
+import StackIcon from '@mui/icons-material/Layers';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -44,31 +44,52 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { Deployment } from '../../../types/Deployment';
 import { Event } from '../../../types/Event';
-import { Module } from '../../../types/Module';
+import { isFailedDeployment, StatusKind, statusKind } from '../../../utils/deploymentStatus';
+import { mapWithConcurrency } from '../../../utils/deploymentFetch';
 import { DeploymentsDialog } from '../../modules/detail/ModuleVersions';
+import { ModuleOverview } from './ModuleOverview';
+import { isStackDeployment, moduleName, useFleetDeployments } from './useFleetDeployments';
+import { scrollToSection } from './OverviewParts';
+import { FleetGate } from './FleetStatus';
+import { UsageRanking } from './UsageRanking';
 
-const ModuleUsageView = ({
-  onBack,
-  onViewIssues,
-}: {
-  onBack: () => void;
-  onViewIssues: () => void;
-}) => {
-  const config = useConfig();
-  const [modules, setModules] = useState<Module[]>([]);
-  const [selectedModule, setSelectedModule] = useState<Module | null>(null);
-  const [rawDeployments, setRawDeployments] = useState<Deployment[]>([]);
-  const [_allErrors, _setAllErrors] = useState<Deployment[]>([]);
-  const [filteredStats, setFilteredStats] = useState<Record<string, any>[]>([]);
-  const [chartRegions, setChartRegions] = useState<string[]>([]);
+/** Deployments per value of one field, as pie slices, largest first. */
+const countBy = (
+  deployments: Deployment[],
+  key: (d: Deployment) => string,
+  label: (value: string) => string = (value) => value,
+) => {
+  const counts = new Map<string, number>();
+  for (const d of deployments) counts.set(key(d), (counts.get(key(d)) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .map(([id, value]) => ({ id, value, label: label(id) }))
+    .sort((a, b) => b.value - a.value);
+};
+
+const capitalise = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+/** A deployment id is only unique within its account, region and environment. */
+const deploymentKey = (d: Deployment) =>
+  `${d.project_id}/${d.region}/${d.environment}/${d.deployment_id}`;
+
+const deploymentLink = (d: Deployment) =>
+  `/infraweave/deployment/${d.project_id}/${d.region}/${encodeURIComponent(
+    d.environment,
+  )}/${encodeURIComponent(d.deployment_id)}/overview`;
+
+type UsageKind = 'module' | 'stack';
+
+const KIND_LABEL: Record<UsageKind, string> = { module: 'Module', stack: 'Stack' };
+
+const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) => {
+  const fleet = useFleetDeployments();
+  const { projectNames } = fleet;
+  const label = KIND_LABEL[kind];
+  const [selectedName, setSelectedName] = useState('');
+  const overviewRef = React.useRef<HTMLDivElement>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [availableStatuses, setAvailableStatuses] = useState<string[]>([]);
-
-  const [loadingModules, setLoadingModules] = useState(true);
-  const [loadingDeployments, setLoadingDeployments] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
 
   // Deployments Dialog State
   const [openDeployments, setOpenDeployments] = useState(false);
@@ -79,122 +100,57 @@ const ModuleUsageView = ({
     setOpenDeployments(true);
   };
 
-  // Fetch Modules and Stacks
+  const catalogue = kind === 'stack' ? fleet.stackCatalogue : fleet.moduleCatalogue;
+  const registered = React.useMemo(() => catalogue.map(moduleName).filter(Boolean), [catalogue]);
+  const stackNames = React.useMemo(
+    () => new Set(fleet.stackCatalogue.map(moduleName)),
+    [fleet.stackCatalogue],
+  );
+  const kindDeployments = React.useMemo(
+    () => fleet.deployments.filter((d) => isStackDeployment(d, stackNames) === (kind === 'stack')),
+    [fleet.deployments, stackNames, kind],
+  );
+  // Registry entries plus anything deployed under a name the registry no longer has.
+  const options = React.useMemo(
+    () =>
+      Array.from(
+        new Set([...registered, ...kindDeployments.map((d) => d.module).filter(Boolean)]),
+      ).sort(),
+    [registered, kindDeployments],
+  );
+
+  const rawDeployments = React.useMemo(
+    () => (selectedName ? kindDeployments.filter((d) => d.module === selectedName) : []),
+    [kindDeployments, selectedName],
+  );
+  const availableStatuses = React.useMemo(
+    () =>
+      Array.from(new Set(rawDeployments.map((d) => d.status)))
+        .filter(Boolean)
+        .sort(),
+    [rawDeployments],
+  );
+
+  const selectFromRanking = (name: string) => {
+    setSelectedName(name);
+    scrollToSection(overviewRef);
+  };
+
+  // Reset filters on selection change
   useEffect(() => {
-    const fetchModules = async () => {
-      setLoadingModules(true);
-      try {
-        const modulesUrl = config.getApiUrl(
-          'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
-        );
-        const stacksUrl = config.getApiUrl(
-          'api/proxy/api/infraweave/api/v1/stacks?fields=module,module_name,track,version',
-        );
-
-        const [modulesResp, stacksResp] = await Promise.all([
-          config.fetch(modulesUrl),
-          config.fetch(stacksUrl).catch(() => ({ ok: false })), // Handle optional stacks failure
-        ]);
-
-        if (!modulesResp.ok) throw new Error('Failed to fetch modules');
-
-        const modulesJson = await modulesResp.json();
-        const stacksJson = (stacksResp as any).ok ? await (stacksResp as any).json() : [];
-
-        const moduleItems = modulesJson.Items || modulesJson.items || modulesJson;
-        const stackItems = stacksJson.Items || stacksJson.items || stacksJson || [];
-
-        const allItems = [...moduleItems, ...stackItems];
-
-        // Deduplicate by module name
-        const uniqueModules = new Map<string, Module>();
-        allItems.forEach((item: Module) => {
-          const name = item.module || item.module_name;
-          if (name && !uniqueModules.has(name)) {
-            uniqueModules.set(name, item);
-          }
-        });
-
-        setModules(Array.from(uniqueModules.values()));
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoadingModules(false);
-      }
-    };
-    fetchModules();
-  }, [config]);
-
-  // Fetch Deployments when module selected
-  useEffect(() => {
-    if (!selectedModule) {
-      setRawDeployments([]);
-      setAvailableStatuses([]);
-      return;
-    }
-
-    // Reset filters on module change
     setStatusFilter([]);
+  }, [selectedName]);
+  // Derived, so no render shows a status that the current selection does not have.
+  const activeStatuses = React.useMemo(
+    () => statusFilter.filter((status) => availableStatuses.includes(status)),
+    [statusFilter, availableStatuses],
+  );
 
-    const fetchDeployments = async () => {
-      setLoadingDeployments(true);
-      try {
-        // Fetch projects
-        const projectsResp = await config.fetch(
-          config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'),
-        );
-        const projects = await projectsResp.json();
-        const projectIds = projects.map((p: any) => p.project_id);
-        const regions = Array.from(
-          new Set(projects.flatMap((p: any) => p.regions || [])),
-        ) as string[];
-        const projectIdsString = projectIds.join(',');
-
-        if (regions.length === 0 || projectIds.length === 0) {
-          setRawDeployments([]);
-          setAvailableStatuses([]);
-          return;
-        }
-
-        const moduleName = selectedModule.module || selectedModule.module_name || '';
-
-        // Fetch deployments for each region
-        const promises = regions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/module/${projectIdsString}/${region}/${moduleName}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch(() => []),
-        );
-
-        const results = await Promise.all(promises);
-        const allDeployments = results.flat();
-
-        const uniqueStatuses = Array.from(new Set(allDeployments.map((d) => d.status))).filter(
-          Boolean,
-        ) as string[];
-
-        setRawDeployments(allDeployments);
-        setAvailableStatuses(uniqueStatuses.sort());
-      } catch (e) {
-        console.error('Failed to fetch deployments', e);
-      } finally {
-        setLoadingDeployments(false);
-      }
-    };
-
-    fetchDeployments();
-  }, [selectedModule, config]);
-
-  // Calculate Stats based on filters
-  useEffect(() => {
+  // Calculated during render, so the first paint already has them.
+  const { filteredStats, chartRegions } = React.useMemo(() => {
     const filteredDeployments =
-      statusFilter.length > 0
-        ? rawDeployments.filter((d) => statusFilter.includes(d.status))
+      activeStatuses.length > 0
+        ? rawDeployments.filter((d) => activeStatuses.includes(d.status))
         : rawDeployments;
 
     // Aggregate by version and region
@@ -226,399 +182,13 @@ const ModuleUsageView = ({
       return totalB - totalA;
     });
 
-    setChartRegions(Array.from(foundRegions).sort());
-    setFilteredStats(statsData);
-  }, [rawDeployments, statusFilter]);
-
-  // Deployment Types and Resource Kinds Stats
-  const [kindStats, setKindStats] = useState<{ id: string; value: number; label: string }[]>([]);
-  const [resourceKindStats, setResourceKindStats] = useState<
-    { id: string; value: number; label: string }[]
-  >([]);
-
-  // Fetch Global Stats (Deployment Types & Resource Kinds)
-  useEffect(() => {
-    const fetchGlobalStats = async () => {
-      try {
-        const projectsResp = await config.fetch(
-          config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'),
-        );
-        const projects = await projectsResp.json();
-        const projectIds = projects.map((p: any) => p.project_id);
-        const regions = Array.from(
-          new Set(projects.flatMap((p: any) => p.regions || [])),
-        ) as string[];
-        const projectIdsString = projectIds.join(',');
-
-        if (regions.length === 0 || projectIds.length === 0) return;
-
-        const promises = regions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/${projectIdsString}/${region}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch(() => []),
-        );
-
-        const results = await Promise.all(promises);
-        const allDeployments = results.flat();
-
-        // Deployment Types
-        const kindCounts: Record<string, number> = {};
-        allDeployments.forEach((d) => {
-          const type = d.module_type || 'regular';
-          kindCounts[type] = (kindCounts[type] || 0) + 1;
-        });
-        setKindStats(
-          Object.entries(kindCounts).map(([type, count]) => ({
-            id: type,
-            value: count,
-            label: type.charAt(0).toUpperCase() + type.slice(1),
-          })),
-        );
-
-        // Resource Kinds
-        const moduleCounts: Record<string, number> = {};
-        allDeployments.forEach((d) => {
-          const mod = d.module || 'unknown';
-          moduleCounts[mod] = (moduleCounts[mod] || 0) + 1;
-        });
-        const modData = Object.entries(moduleCounts).map(([mod, count]) => ({
-          id: mod,
-          value: count,
-          label: mod,
-        }));
-        modData.sort((a, b) => b.value - a.value);
-        setResourceKindStats(modData);
-      } catch (e) {
-        console.error('Failed to fetch global stats for module usage view', e);
-      }
+    return {
+      filteredStats: statsData as Record<string, any>[],
+      chartRegions: Array.from(foundRegions).sort(),
     };
-    fetchGlobalStats();
-  }, [config]);
+  }, [rawDeployments, activeStatuses]);
 
-  // Pre-select the most active module once stats are loaded - REMOVED
-  // User requested removal of auto-select
-  useEffect(() => {
-    setSelectedModule(null);
-    setRawDeployments([]);
-    setFilteredStats([]);
-  }, []);
-
-  if (loadingModules) return <Progress />;
-  if (error) return <ResponseErrorPanel error={error} />;
-
-  return (
-    <Grid container spacing={3}>
-      <Grid size={12}>
-        <Box mb={2} display="flex" justifyContent="space-between" alignItems="center">
-          <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
-            Back to Dashboard
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<HealthAndSafetyIcon />}
-            onClick={onViewIssues}
-          >
-            View Problematic Modules
-          </Button>
-        </Box>
-
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <InfoCard title="Deployment Types">
-              <Typography variant="body1" paragraph>
-                Distribution of deployments by module type across all projects.
-              </Typography>
-              <Box sx={{ width: '100%', height: 250, display: 'flex', justifyContent: 'center' }}>
-                <PieChart
-                  series={[
-                    {
-                      data: kindStats,
-                      innerRadius: 30,
-                      outerRadius: 80,
-                      paddingAngle: 5,
-                      cornerRadius: 5,
-                    },
-                  ]}
-                  height={250}
-                  margin={{ right: 200 }}
-                />
-              </Box>
-            </InfoCard>
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <InfoCard title="Active Modules Share">
-              <Typography variant="body1" paragraph>
-                Proportion of total deployments contributed by each module/stack across all
-                projects.
-              </Typography>
-              <Box sx={{ width: '100%', height: 250, display: 'flex', justifyContent: 'center' }}>
-                <PieChart
-                  series={[
-                    {
-                      data: resourceKindStats,
-                      innerRadius: 30,
-                      outerRadius: 80,
-                      paddingAngle: 5,
-                      cornerRadius: 5,
-                    },
-                  ]}
-                  height={250}
-                  margin={{ right: 200 }}
-                />
-              </Box>
-            </InfoCard>
-          </Grid>
-        </Grid>
-
-        <Card variant="outlined" sx={{ width: '100%' }}>
-          <CardHeader
-            title="Module Version Distribution"
-            titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          />
-          <CardContent>
-            <Typography variant="body1" paragraph>
-              Select a module to view its deployment usage across versions.
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: selectedModule ? 3 : 0 }}>
-              <Autocomplete
-                options={modules}
-                getOptionLabel={(option) => option.module || option.module_name || ''}
-                value={selectedModule}
-                onChange={(_, newValue) => setSelectedModule(newValue)}
-                renderInput={(params) => (
-                  <TextField {...params} label="Select Module" variant="outlined" />
-                )}
-                sx={{ width: 300 }}
-              />
-
-              {selectedModule && (
-                <Autocomplete
-                  multiple
-                  options={availableStatuses}
-                  value={statusFilter}
-                  onChange={(_, newValue) => setStatusFilter(newValue)}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Filter Status"
-                      variant="outlined"
-                      placeholder="All Statuses"
-                    />
-                  )}
-                  sx={{ width: 300 }}
-                />
-              )}
-            </Box>
-
-            {loadingDeployments && <Progress />}
-
-            {!loadingDeployments && selectedModule && filteredStats.length === 0 && (
-              <Typography>No active deployments found for this module.</Typography>
-            )}
-
-            {!loadingDeployments && filteredStats.length > 0 && (
-              <>
-                <Box sx={{ width: '100%', mb: 2 }}>
-                  <Typography variant="h6" gutterBottom align="center">
-                    Active Deployments by Version
-                  </Typography>
-                  <BarChart
-                    dataset={filteredStats}
-                    xAxis={[{ scaleType: 'band', dataKey: 'version', label: 'Version' }]}
-                    series={chartRegions.map((region) => ({
-                      dataKey: region,
-                      label: region,
-                      stack: 'total',
-                    }))}
-                    slotProps={{
-                      legend: {
-                        position: { vertical: 'top', horizontal: 'center' },
-                      },
-                    }}
-                    height={350}
-                  />
-                </Box>
-
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Version</TableCell>
-                        {chartRegions.map((region) => (
-                          <TableCell key={region} align="right">
-                            {region}
-                          </TableCell>
-                        ))}
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                          Total
-                        </TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filteredStats.map((row) => {
-                        const total = chartRegions.reduce(
-                          (sum, region) => sum + (row[region] || 0),
-                          0,
-                        );
-                        return (
-                          <TableRow key={row.version}>
-                            <TableCell component="th" scope="row">
-                              <MuiLink
-                                component="button"
-                                variant="body2"
-                                onClick={() => handleVersionClick(row.version)}
-                                underline="hover"
-                              >
-                                {row.version}
-                              </MuiLink>
-                            </TableCell>
-                            {chartRegions.map((region) => (
-                              <TableCell key={region} align="right">
-                                {row[region] || 0}
-                              </TableCell>
-                            ))}
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                              {total}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                {openDeployments && (
-                  <DeploymentsDialog
-                    open={openDeployments}
-                    onClose={() => setOpenDeployments(false)}
-                    moduleName={selectedModule.module || selectedModule.module_name || ''}
-                    version={selectedVersionForModal}
-                  />
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
-};
-
-const VelocityView = ({ onBack }: { onBack: () => void }) => {
-  const config = useConfig();
-  const chartColors = useChartStatusColors();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<{ date: string; success: number; failed: number }[]>([]);
-  const [error, setError] = useState<Error | null>(null);
-  const [timeframe, setTimeframe] = useState(30);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch projects
-        const projectsResp = await config.fetch(
-          config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'),
-        );
-        const projects = await projectsResp.json();
-        const projectIds = projects.map((p: any) => p.project_id);
-        const regions = Array.from(
-          new Set(projects.flatMap((p: any) => p.regions || [])),
-        ) as string[];
-        const projectIdsString = projectIds.join(',');
-
-        if (regions.length === 0 || projectIds.length === 0) {
-          setStats([]);
-          return;
-        }
-
-        // Fetch deployments for each region first
-        const deploymentPromises = regions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/${projectIdsString}/${region}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch(() => []),
-        );
-
-        const deploymentResults = await Promise.all(deploymentPromises);
-        const allDeployments = deploymentResults.flat();
-
-        // Fetch events for each deployment to get history
-        // Note: This issues N requests where N is the number of deployments.
-        const eventPromises = allDeployments.map((d) => {
-          const encEnv = encodeURIComponent(d.environment);
-          const encId = encodeURIComponent(d.deployment_id);
-          return config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/events/${d.project_id}/${d.region}/${encEnv}/${encId}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (Array.isArray(json) ? json : []) as Event[])
-            .catch(() => [] as Event[]);
-        });
-
-        const eventsResults = await Promise.all(eventPromises);
-        const allEvents = eventsResults.flat();
-
-        // Group by Date (YYYY-MM-DD)
-        const grouped: Record<string, { success: number; failed: number }> = {};
-
-        allEvents.forEach((e) => {
-          if (!e.epoch) return;
-          const date = new Date(e.epoch).toISOString().split('T')[0];
-
-          if (!grouped[date]) {
-            grouped[date] = { success: 0, failed: 0 };
-          }
-
-          if (e.status === 'successful' || e.status === 'active' || e.status === 'success') {
-            grouped[date].success++;
-          } else if (e.status === 'failed' || e.status === 'error') {
-            grouped[date].failed++;
-          }
-        });
-
-        // Fill details for last N days
-        const today = new Date();
-        const chartData = [];
-        for (let i = timeframe - 1; i >= 0; i--) {
-          const d = new Date(today);
-          d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().split('T')[0];
-          chartData.push({
-            date: dateStr,
-            success: grouped[dateStr]?.success || 0,
-            failed: grouped[dateStr]?.failed || 0,
-          });
-        }
-
-        setStats(chartData);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [config, timeframe]);
-
-  if (loading) return <Progress />;
-  if (error) return <ResponseErrorPanel error={error} />;
+  if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;
 
   return (
     <Grid container spacing={3}>
@@ -628,135 +198,366 @@ const VelocityView = ({ onBack }: { onBack: () => void }) => {
             Back to Dashboard
           </Button>
         </Box>
-        <InfoCard title="Operational Velocity">
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="body1">
-              Deployment frequency and success rate over time across all projects.
-            </Typography>
-            <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
-              <InputLabel id="timeframe-select-label">Timeframe</InputLabel>
-              <Select
-                labelId="timeframe-select-label"
-                value={timeframe}
-                onChange={(e) => setTimeframe(Number(e.target.value))}
-                label="Timeframe"
-              >
-                <MenuItem value={7}>Last 7 Days</MenuItem>
-                <MenuItem value={14}>Last 14 Days</MenuItem>
-                <MenuItem value={30}>Last 30 Days</MenuItem>
-                <MenuItem value={60}>Last 60 Days</MenuItem>
-                <MenuItem value={90}>Last 90 Days</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-
-          <Box sx={{ width: '100%', height: 400 }}>
-            <LineChart
-              dataset={stats}
-              xAxis={[{ scaleType: 'point', dataKey: 'date', label: 'Date' }]}
-              series={[
-                { dataKey: 'success', label: 'Successful Deployments', color: chartColors.success },
-                { dataKey: 'failed', label: 'Failed Deployments', color: chartColors.failed },
-              ]}
-              height={350}
+        <FleetGate
+          fleet={fleet}
+          scope={{ deployments: kindDeployments, noun: `${kind} deployment` }}
+        >
+          <Card variant="outlined" sx={{ width: '100%', mb: 3 }}>
+            <CardHeader
+              title={`Most deployed ${kind}s`}
+              titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
+              sx={{ borderBottom: 1, borderColor: 'divider' }}
             />
-          </Box>
-        </InfoCard>
+            <CardContent>
+              <Typography variant="body1" paragraph>
+                Every {kind} in the registry, by number of active deployments across all accounts.
+                Select one to see where it runs and on which versions.
+              </Typography>
+              <UsageRanking
+                kind={kind}
+                deployments={kindDeployments}
+                registered={registered}
+                loading={fleet.loadingCatalog}
+                selected={selectedName}
+                onSelect={selectFromRanking}
+              />
+            </CardContent>
+          </Card>
+
+          <Card ref={overviewRef} variant="outlined" sx={{ width: '100%', mb: 3 }}>
+            <CardHeader
+              title={`${label} Fleet Overview`}
+              titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
+              sx={{ borderBottom: 1, borderColor: 'divider' }}
+            />
+            <CardContent>
+              <Typography variant="body1" paragraph>
+                Pick a {kind} to see its deployments across all accounts and regions.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mb: selectedName ? 3 : 0 }}>
+                <Autocomplete
+                  options={options}
+                  value={selectedName || null}
+                  onChange={(_, newValue) => setSelectedName(newValue ?? '')}
+                  renderInput={(params) => (
+                    <TextField {...params} label={`Select ${label}`} variant="outlined" />
+                  )}
+                  sx={{ width: 300 }}
+                />
+              </Box>
+
+              {selectedName && (
+                <ModuleOverview
+                  kind={kind}
+                  deployments={rawDeployments}
+                  projectNames={projectNames}
+                  onVersionClick={handleVersionClick}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {selectedName && (
+            <Card variant="outlined" sx={{ width: '100%' }}>
+              <CardHeader
+                title="Version Distribution by Region"
+                titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
+                sx={{ borderBottom: 1, borderColor: 'divider' }}
+              />
+              <CardContent>
+                {/* Status filter is card-local so the overview keeps showing failures. */}
+                <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                  <Autocomplete
+                    multiple
+                    options={availableStatuses}
+                    value={activeStatuses}
+                    onChange={(_, newValue) => setStatusFilter(newValue)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Filter Status"
+                        variant="outlined"
+                        placeholder="All Statuses"
+                      />
+                    )}
+                    sx={{ width: 300 }}
+                  />
+                </Box>
+
+                {filteredStats.length === 0 && (
+                  <Typography color="text.secondary">
+                    {rawDeployments.length === 0
+                      ? `No active deployments found for this ${kind}.`
+                      : 'No deployments match the selected statuses.'}
+                  </Typography>
+                )}
+
+                {filteredStats.length > 0 && (
+                  <>
+                    <Box sx={{ width: '100%', mb: 2 }}>
+                      <Typography variant="h6" gutterBottom align="center">
+                        Active Deployments by Version
+                      </Typography>
+                      <BarChart
+                        dataset={filteredStats}
+                        xAxis={[{ scaleType: 'band', dataKey: 'version', label: 'Version' }]}
+                        series={chartRegions.map((region) => ({
+                          dataKey: region,
+                          label: region,
+                          stack: 'total',
+                        }))}
+                        slotProps={{
+                          legend: {
+                            position: { vertical: 'top', horizontal: 'center' },
+                          },
+                        }}
+                        height={350}
+                      />
+                    </Box>
+
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Version</TableCell>
+                            {chartRegions.map((region) => (
+                              <TableCell key={region} align="right">
+                                {region}
+                              </TableCell>
+                            ))}
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                              Total
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {filteredStats.map((row) => {
+                            const total = chartRegions.reduce(
+                              (sum, region) => sum + (row[region] || 0),
+                              0,
+                            );
+                            return (
+                              <TableRow key={row.version}>
+                                <TableCell component="th" scope="row">
+                                  <MuiLink
+                                    component="button"
+                                    variant="body2"
+                                    onClick={() => handleVersionClick(row.version)}
+                                    underline="hover"
+                                  >
+                                    {row.version}
+                                  </MuiLink>
+                                </TableCell>
+                                {chartRegions.map((region) => (
+                                  <TableCell key={region} align="right">
+                                    {row[region] || 0}
+                                  </TableCell>
+                                ))}
+                                <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                                  {total}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Outside both cards: a version link in the overview opens it as well. */}
+          {openDeployments && selectedName && (
+            <DeploymentsDialog
+              open={openDeployments}
+              onClose={() => setOpenDeployments(false)}
+              moduleName={selectedName}
+              version={selectedVersionForModal}
+              resourceType={kind}
+            />
+          )}
+        </FleetGate>
+      </Grid>
+    </Grid>
+  );
+};
+
+/** Max concurrent events requests, same limit as the fleet fetch. */
+const MAX_CONCURRENT_EVENT_REQUESTS = 6;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const VelocityView = ({ onBack }: { onBack: () => void }) => {
+  const config = useConfig();
+  const fleet = useFleetDeployments();
+  const chartColors = useChartStatusColors();
+  // Null until the first load; a refresh keeps the chart up until its events arrive.
+  const [events, setEvents] = useState<Event[] | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [timeframe, setTimeframe] = useState(30);
+
+  // Not keyed on the timeframe, which only changes how the same events are counted.
+  useEffect(() => {
+    // Events are fetched per deployment, so wait for the fleet.
+    if (fleet.fetchedAt === 0 || !fleet.accessKnown) return undefined;
+
+    // Keeps a superseded run from overwriting newer events if it finishes last.
+    let cancelled = false;
+
+    const fetchData = async () => {
+      setError(null);
+      try {
+        const allDeployments = fleet.deployments;
+
+        // A fleet can have thousands of deployments, so throttle and stop once superseded.
+        const eventsResults = await mapWithConcurrency(
+          allDeployments,
+          MAX_CONCURRENT_EVENT_REQUESTS,
+          (d): Promise<Event[]> => {
+            if (cancelled) return Promise.resolve([]);
+            const encEnv = encodeURIComponent(d.environment);
+            const encId = encodeURIComponent(d.deployment_id);
+            return config
+              .fetch(
+                config.getApiUrl(
+                  `api/proxy/api/infraweave/api/v1/events/${d.project_id}/${d.region}/${encEnv}/${encId}`,
+                ),
+              )
+              .then((r) => (r.ok ? r.json() : []))
+              .then((json) => (Array.isArray(json) ? json : []) as Event[])
+              .catch(() => [] as Event[]);
+          },
+        );
+        if (!cancelled) setEvents(eventsResults.flat());
+      } catch (err) {
+        if (!cancelled) setError(err as Error);
+      }
+    };
+
+    fetchData();
+    return () => {
+      cancelled = true;
+    };
+  }, [config, fleet.fetchedAt, fleet.accessKnown, fleet.deployments]);
+
+  const stats = React.useMemo(() => {
+    // Group by Date (YYYY-MM-DD)
+    const grouped: Record<string, { success: number; failed: number }> = {};
+
+    (events ?? []).forEach((e) => {
+      if (!e.epoch) return;
+      const date = new Date(e.epoch).toISOString().split('T')[0];
+
+      if (!grouped[date]) {
+        grouped[date] = { success: 0, failed: 0 };
+      }
+
+      const kind = statusKind(e.status);
+      if (kind === 'success') grouped[date].success++;
+      else if (kind === 'failed') grouped[date].failed++;
+    });
+
+    // Fill details for last N days. Stepped in UTC days, as the events are grouped, so a
+    // daylight saving change neither skips nor repeats a day.
+    const now = Date.now();
+    const chartData = [];
+    for (let i = timeframe - 1; i >= 0; i--) {
+      const dateStr = new Date(now - i * DAY_MS).toISOString().split('T')[0];
+      chartData.push({
+        date: dateStr,
+        success: grouped[dateStr]?.success || 0,
+        failed: grouped[dateStr]?.failed || 0,
+      });
+    }
+    return chartData;
+  }, [events, timeframe]);
+
+  if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;
+  if (error) return <ResponseErrorPanel error={error} />;
+  // Until a fleet exists, the gate below shows its own loading screen.
+  if (!events && fleet.fetchedAt > 0 && fleet.accessKnown) return <Progress />;
+
+  return (
+    <Grid container spacing={3}>
+      <Grid size={12}>
+        <Box mb={2}>
+          <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
+            Back to Dashboard
+          </Button>
+        </Box>
+        <FleetGate fleet={fleet}>
+          <InfoCard title="Operational Velocity">
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="body1">
+                Deployment frequency and success rate over time across all projects.
+              </Typography>
+              <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
+                <InputLabel id="timeframe-select-label">Timeframe</InputLabel>
+                <Select
+                  labelId="timeframe-select-label"
+                  value={timeframe}
+                  onChange={(e) => setTimeframe(Number(e.target.value))}
+                  label="Timeframe"
+                >
+                  <MenuItem value={7}>Last 7 Days</MenuItem>
+                  <MenuItem value={14}>Last 14 Days</MenuItem>
+                  <MenuItem value={30}>Last 30 Days</MenuItem>
+                  <MenuItem value={60}>Last 60 Days</MenuItem>
+                  <MenuItem value={90}>Last 90 Days</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Box sx={{ width: '100%', height: 400 }}>
+              <LineChart
+                dataset={stats}
+                xAxis={[{ scaleType: 'point', dataKey: 'date', label: 'Date' }]}
+                series={[
+                  {
+                    dataKey: 'success',
+                    label: 'Successful Deployments',
+                    color: chartColors.success,
+                  },
+                  { dataKey: 'failed', label: 'Failed Deployments', color: chartColors.failed },
+                ]}
+                height={350}
+              />
+            </Box>
+          </InfoCard>
+        </FleetGate>
       </Grid>
     </Grid>
   );
 };
 
 const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
-  const config = useConfig();
+  const fleet = useFleetDeployments();
   const chartColors = useChartStatusColors();
-  const [loading, setLoading] = useState(true);
-  const [statusStats, setStatusStats] = useState<
-    { id: string; value: number; label: string; color: string }[]
-  >([]);
-  const [errorDeployments, setErrorDeployments] = useState<Deployment[]>([]);
-  const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch projects
-        const projectsResp = await config.fetch(
-          config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'),
-        );
-        const projects = await projectsResp.json();
-        const projectIds = projects.map((p: any) => p.project_id);
-        const regions = Array.from(
-          new Set(projects.flatMap((p: any) => p.regions || [])),
-        ) as string[];
-        const projectIdsString = projectIds.join(',');
+  // chartColors is a per-mode constant, so this only reruns on a theme flip or fleet reload.
+  const statusStats = React.useMemo(
+    () =>
+      countBy(fleet.deployments, (d) => d.status || 'unknown', capitalise).map((slice) => {
+        const colorByKind: Record<StatusKind, string> = {
+          success: chartColors.success,
+          failed: chartColors.failed,
+          'in-progress': chartColors.inProgress,
+          unknown: chartColors.unknown,
+        };
+        return { ...slice, color: colorByKind[statusKind(slice.id)] };
+      }),
+    [fleet.deployments, chartColors],
+  );
 
-        if (regions.length === 0 || projectIds.length === 0) {
-          setLoading(false);
-          return;
-        }
+  const errorDeployments = React.useMemo(
+    // Same rule as Module Issues, so the two views agree on how many are failing.
+    () => fleet.deployments.filter(isFailedDeployment),
+    [fleet.deployments],
+  );
 
-        // Fetch deployments for each region
-        const promises = regions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/${projectIdsString}/${region}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch(() => []),
-        );
-
-        const results = await Promise.all(promises);
-        const allDeployments = results.flat();
-
-        // 1. Status Ratio
-        const statusCounts: Record<string, number> = {};
-        allDeployments.forEach((d) => {
-          const status = d.status || 'unknown';
-          statusCounts[status] = (statusCounts[status] || 0) + 1;
-        });
-
-        const statusData = Object.entries(statusCounts).map(([status, count], _index) => {
-          let color: string = chartColors.unknown;
-          if (status === 'successful' || status === 'active') color = chartColors.success;
-          if (status === 'failed' || status === 'error') color = chartColors.failed;
-          if (status === 'in-progress') color = chartColors.inProgress;
-
-          return {
-            id: status,
-            value: count,
-            label: status.charAt(0).toUpperCase() + status.slice(1),
-            color: color,
-          };
-        });
-        setStatusStats(statusData);
-
-        // 4. Error Deployments
-        const errors = allDeployments.filter(
-          (d) =>
-            d.status === 'failed' ||
-            d.status === 'error' ||
-            (d.error_text && d.error_text.length > 0),
-        );
-        setErrorDeployments(errors);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-    // chartColors is a per-mode constant, so this only re-runs on a theme flip,
-    // which is exactly when the baked-in slice colours need recomputing.
-  }, [config, chartColors]);
-
-  if (loading) return <Progress />;
-  if (error) return <ResponseErrorPanel error={error} />;
+  if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;
 
   return (
     <Grid container spacing={3}>
@@ -766,103 +567,103 @@ const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
             Back to Dashboard
           </Button>
         </Box>
-        <Grid container spacing={3}>
-          {/* Status Ratio */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <InfoCard title="Status Ratio">
-              <Typography variant="body1" paragraph>
-                Overview of deployment statuses across all projects in the platform.
-              </Typography>
-              <Box sx={{ width: '100%', height: 300, display: 'flex', justifyContent: 'center' }}>
-                <PieChart
-                  series={[
-                    {
-                      data: statusStats,
-                      innerRadius: 30,
-                      outerRadius: 100,
-                      paddingAngle: 5,
-                      cornerRadius: 5,
-                      highlightScope: { fade: 'global', highlight: 'item' },
-                      faded: { innerRadius: 30, additionalRadius: -30, color: 'gray' },
-                    },
-                  ]}
-                  height={300}
-                  slotProps={{ legend: { hidden: true } as any }}
-                />
-              </Box>
-            </InfoCard>
-          </Grid>
-
-          {/* Error Log */}
-          <Grid size={12}>
-            <InfoCard title={`Active Errors (${errorDeployments.length})`}>
-              <Typography variant="body1" paragraph>
-                Detailed list of deployments currently active but in a failed state across all
-                projects.
-              </Typography>
-              {errorDeployments.length === 0 ? (
-                <Typography
-                  variant="body1"
-                  sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
-                >
-                  No deployments currently in failed state. Great job!
+        <FleetGate fleet={fleet}>
+          <Grid container spacing={3}>
+            {/* Status Ratio */}
+            <Grid size={{ xs: 12, md: 6 }}>
+              <InfoCard title="Status Ratio">
+                <Typography variant="body1" paragraph>
+                  Overview of deployment statuses across all projects in the platform.
                 </Typography>
-              ) : (
-                <TableContainer component={Paper} elevation={0}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Deployment ID</TableCell>
-                        <TableCell>Environment</TableCell>
-                        <TableCell>Region</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Error Info</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {errorDeployments.map((d) => (
-                        <TableRow key={d.deployment_id}>
-                          <TableCell sx={{ fontWeight: 'medium' }}>
-                            <Link to={`/infraweave/deployment/${d.environment}/${d.deployment_id}`}>
-                              {d.deployment_id}
-                            </Link>
-                          </TableCell>
-                          <TableCell>{d.environment}</TableCell>
-                          <TableCell>{d.region}</TableCell>
-                          <TableCell sx={{ color: 'error.main' }}>{d.status}</TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="error">
-                              {d.error_text || 'Unknown failure reason'}
-                            </Typography>
-                          </TableCell>
+                <Box sx={{ width: '100%', height: 300, display: 'flex', justifyContent: 'center' }}>
+                  <PieChart
+                    series={[
+                      {
+                        data: statusStats,
+                        innerRadius: 30,
+                        outerRadius: 100,
+                        paddingAngle: 5,
+                        cornerRadius: 5,
+                        highlightScope: { fade: 'global', highlight: 'item' },
+                        faded: { innerRadius: 30, additionalRadius: -30, color: 'gray' },
+                      },
+                    ]}
+                    height={300}
+                  />
+                </Box>
+              </InfoCard>
+            </Grid>
+
+            {/* Error Log */}
+            <Grid size={12}>
+              <InfoCard title={`Active Errors (${errorDeployments.length})`}>
+                <Typography variant="body1" paragraph>
+                  Detailed list of deployments currently active but in a failed state across all
+                  projects.
+                </Typography>
+                {errorDeployments.length === 0 ? (
+                  <Typography
+                    variant="body1"
+                    sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
+                  >
+                    No deployments currently in failed state. Great job!
+                  </Typography>
+                ) : (
+                  <TableContainer component={Paper} elevation={0}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Deployment ID</TableCell>
+                          <TableCell>Environment</TableCell>
+                          <TableCell>Region</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Error Info</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </InfoCard>
+                      </TableHead>
+                      <TableBody>
+                        {errorDeployments.map((d) => (
+                          <TableRow key={deploymentKey(d)}>
+                            <TableCell sx={{ fontWeight: 'medium' }}>
+                              <Link to={deploymentLink(d)}>{d.deployment_id}</Link>
+                            </TableCell>
+                            <TableCell>{d.environment}</TableCell>
+                            <TableCell>{d.region}</TableCell>
+                            <TableCell sx={{ color: 'error.main' }}>{d.status}</TableCell>
+                            <TableCell>
+                              <Typography variant="body2" color="error">
+                                {d.error_text || 'Unknown failure reason'}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </InfoCard>
+            </Grid>
           </Grid>
-        </Grid>
+        </FleetGate>
       </Grid>
     </Grid>
   );
 };
 
+/** A module or a stack: the two can share a name, so the kind is part of what it is. */
+type IssueEntry = { name: string; kind: UsageKind };
+
+const entryKey = (entry: IssueEntry) => `${entry.kind}:${entry.name}`;
+
+const entryLabel = (entry: IssueEntry) =>
+  entry.kind === 'stack' ? `${entry.name} (stack)` : entry.name;
+
 const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
-  const config = useConfig();
+  const fleet = useFleetDeployments();
+  const { deployments: rawDeployments } = fleet;
   const chartColors = useChartStatusColors();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<
-    { module: string; total: number; failed: number; rate: number }[]
-  >([]);
-  const [error, setError] = useState<Error | null>(null);
-  const [modules, setModules] = useState<Module[]>([]);
-  const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<IssueEntry | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-  const [rawDeployments, setRawDeployments] = useState<Deployment[]>([]);
-  const [allErrors, setAllErrors] = useState<Deployment[]>([]);
 
   const uniqueRegions = Array.from(new Set(rawDeployments.map((d) => d.region)))
     .filter(Boolean)
@@ -871,137 +672,60 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
     .filter(Boolean)
     .sort();
 
-  const handleModuleClick = (moduleName: string) => {
-    const mod = modules.find((m) => (m.module || m.module_name) === moduleName);
-    if (mod) {
-      setSelectedModule(mod);
-      // Optionally scroll to Active Errors list?
-    }
+  const activeErrorsRef = React.useRef<HTMLDivElement>(null);
+
+  const stackNames = React.useMemo(
+    () => new Set(fleet.stackCatalogue.map(moduleName)),
+    [fleet.stackCatalogue],
+  );
+  const entryOf = React.useCallback(
+    (d: Deployment): IssueEntry => ({
+      name: d.module || 'unknown',
+      kind: isStackDeployment(d, stackNames) ? 'stack' : 'module',
+    }),
+    [stackNames],
+  );
+
+  const handleEntryClick = (entry: IssueEntry) => {
+    setSelectedEntry(entry);
+    scrollToSection(activeErrorsRef);
   };
+  // Both registries, plus a selection no longer in either, so the filter can show it.
+  const entryOptions = React.useMemo(() => {
+    const entries = new Map<string, IssueEntry>();
+    const add = (entry: IssueEntry) => entries.set(entryKey(entry), entry);
+    fleet.moduleCatalogue.forEach((m) => add({ name: moduleName(m), kind: 'module' }));
+    fleet.stackCatalogue.forEach((m) => add({ name: moduleName(m), kind: 'stack' }));
+    if (selectedEntry) add(selectedEntry);
+    return Array.from(entries.values()).sort((a, b) => entryLabel(a).localeCompare(entryLabel(b)));
+  }, [fleet.moduleCatalogue, fleet.stackCatalogue, selectedEntry]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch modules and stacks
-        const modulesUrl = config.getApiUrl(
-          'api/proxy/api/infraweave/api/v1/modules?fields=module,module_name,track,version',
-        );
-        const stacksUrl = config.getApiUrl(
-          'api/proxy/api/infraweave/api/v1/stacks?fields=module,module_name,track,version',
-        );
-
-        const [modulesResp, stacksResp] = await Promise.all([
-          config.fetch(modulesUrl),
-          config.fetch(stacksUrl).catch(() => ({ ok: false })), // Handle optional stacks failure gracefully
-        ]);
-
-        if (modulesResp.ok) {
-          const modulesJson = await modulesResp.json();
-          const stacksJson = (stacksResp as any).ok ? await (stacksResp as any).json() : [];
-
-          const moduleItems = modulesJson.Items || modulesJson.items || modulesJson;
-          const stackItems = stacksJson.Items || stacksJson.items || stacksJson || [];
-
-          const allItems = [...moduleItems, ...stackItems];
-
-          const uniqueModules = new Map<string, Module>();
-          allItems.forEach((item: Module) => {
-            const name = item.module || item.module_name;
-            if (name && !uniqueModules.has(name)) {
-              uniqueModules.set(name, item);
-            }
-          });
-          setModules(Array.from(uniqueModules.values()));
-        }
-
-        // Fetch Projects
-        const projectsResp = await config.fetch(
-          config.getApiUrl('api/proxy/api/infraweave/api/v1/projects'),
-        );
-        const projects = await projectsResp.json();
-        const projectIds = projects.map((p: any) => p.project_id);
-        const regions = Array.from(
-          new Set(projects.flatMap((p: any) => p.regions || [])),
-        ) as string[];
-        const projectIdsString = projectIds.join(',');
-
-        if (regions.length === 0 || projectIds.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        const promises = regions.map((region) =>
-          config
-            .fetch(
-              config.getApiUrl(
-                `api/proxy/api/infraweave/api/v1/deployments/${projectIdsString}/${region}`,
-              ),
-            )
-            .then((r) => (r.ok ? r.json() : []))
-            .then((json) => (json.Items || json.items || json) as Deployment[])
-            .catch(() => []),
-        );
-
-        const results = await Promise.all(promises);
-        const allDeployments = results.flat();
-        setRawDeployments(allDeployments);
-
-        // Initial processing
-        processData(allDeployments, null, null, null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [config]);
-
-  const processData = (
-    deployments: Deployment[],
-    filterModule: Module | null,
-    filterRegion: string | null,
-    filterAccount: string | null,
-  ) => {
-    const moduleMap: Record<string, { total: number; failed: number }> = {};
+  // Calculated during render, so the first paint already has them.
+  const { stats, allErrors } = React.useMemo(() => {
+    const byEntry = new Map<string, { entry: IssueEntry; total: number; failed: number }>();
     const errors: Deployment[] = [];
 
-    deployments.forEach((d) => {
-      const mod = d.module || 'unknown';
+    rawDeployments.forEach((d) => {
+      const entry = entryOf(d);
+      const key = entryKey(entry);
 
       // 1. Calculate Stats (Global - ignore filter)
-      if (!moduleMap[mod]) {
-        moduleMap[mod] = { total: 0, failed: 0 };
-      }
-      moduleMap[mod].total++;
+      const counts = byEntry.get(key) ?? { entry, total: 0, failed: 0 };
+      byEntry.set(key, counts);
+      counts.total++;
 
-      const status = (d.status || '').toLowerCase();
-      const hasErrorText = d.error_text && d.error_text.trim().length > 0;
-      const isFailureStatus = [
-        'failed',
-        'error',
-        'failure',
-        'timed_out',
-        'cancelled',
-        'rolled_back',
-      ].includes(status);
-      const isFailed = isFailureStatus || hasErrorText;
+      const isFailed = isFailedDeployment(d);
 
       if (isFailed) {
-        moduleMap[mod].failed++;
+        counts.failed++;
       }
 
       // 2. Calculate Errors List (Apply Filter)
       if (isFailed) {
         let include = true;
-        if (filterModule) {
-          const filterName = filterModule.module || filterModule.module_name;
-          if (mod !== filterName) include = false;
-        }
-        if (filterRegion && d.region !== filterRegion) include = false;
-        if (filterAccount && d.project_id !== filterAccount) include = false;
+        if (selectedEntry && key !== entryKey(selectedEntry)) include = false;
+        if (selectedRegion && d.region !== selectedRegion) include = false;
+        if (selectedAccount && d.project_id !== selectedAccount) include = false;
 
         if (include) {
           errors.push(d);
@@ -1009,29 +733,23 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
       }
     });
 
-    const processed = Object.entries(moduleMap).map(([mod, counts]) => ({
-      module: mod,
-      total: counts.total,
-      failed: counts.failed,
-      rate: counts.total > 0 ? (counts.failed / counts.total) * 100 : 0,
+    const processed = Array.from(byEntry.values(), ({ entry, total, failed }) => ({
+      key: entryKey(entry),
+      entry,
+      label: entryLabel(entry),
+      total,
+      failed,
+      rate: total > 0 ? (failed / total) * 100 : 0,
     }));
 
     // Sort by failed count desc
     processed.sort((a, b) => b.failed - a.failed);
 
-    setStats(processed);
-    setAllErrors(errors);
-  };
+    return { stats: processed, allErrors: errors };
+  }, [rawDeployments, entryOf, selectedEntry, selectedRegion, selectedAccount]);
+  const filtering = Boolean(selectedEntry || selectedRegion || selectedAccount);
 
-  // Update processing when selection changes
-  useEffect(() => {
-    if (rawDeployments.length > 0) {
-      processData(rawDeployments, selectedModule, selectedRegion, selectedAccount);
-    }
-  }, [selectedModule, selectedRegion, selectedAccount, rawDeployments]);
-
-  if (loading) return <Progress />;
-  if (error) return <ResponseErrorPanel error={error} />;
+  if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;
 
   return (
     <Grid container spacing={3}>
@@ -1041,195 +759,202 @@ const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
             Back to Dashboard
           </Button>
         </Box>
+        <FleetGate fleet={fleet}>
+          <Grid container spacing={3}>
+            {/* Top Modules Chart & Stats */}
+            <Grid size={12}>
+              <InfoCard title="Failure Overview">
+                <Typography variant="body1" paragraph>
+                  Identify modules with the highest number of failed deployments across all
+                  projects.
+                </Typography>
 
-        <Grid container spacing={3}>
-          {/* Top Modules Chart & Stats */}
-          <Grid size={12}>
-            <InfoCard title="Failure Overview">
-              <Typography variant="body1" paragraph>
-                Identify modules with the highest number of failed deployments across all projects.
-              </Typography>
-
-              {stats.some((s) => s.failed > 0) ? (
-                <Box sx={{ width: '100%', height: 400, mb: 4 }}>
-                  <Typography variant="h6" align="center" gutterBottom>
-                    Top Modules / Stacks by Failure Count
+                {stats.some((s) => s.failed > 0) ? (
+                  <Box sx={{ width: '100%', height: 400, mb: 4 }}>
+                    <Typography variant="h6" align="center" gutterBottom>
+                      Top Modules / Stacks by Failure Count
+                    </Typography>
+                    <BarChart
+                      dataset={stats.slice(0, 10).filter((s) => s.failed > 0)}
+                      xAxis={[{ scaleType: 'band', dataKey: 'label', label: 'Module / Stack' }]}
+                      series={[
+                        {
+                          dataKey: 'failed',
+                          label: 'Failed Deployments',
+                          color: chartColors.failed,
+                        },
+                      ]}
+                      height={350}
+                    />
+                  </Box>
+                ) : (
+                  <Typography
+                    variant="body1"
+                    sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
+                  >
+                    No failed deployments found.
                   </Typography>
-                  <BarChart
-                    dataset={stats.slice(0, 10).filter((s) => s.failed > 0)}
-                    xAxis={[{ scaleType: 'band', dataKey: 'module', label: 'Module / Stack' }]}
-                    series={[
-                      { dataKey: 'failed', label: 'Failed Deployments', color: chartColors.failed },
-                    ]}
-                    height={350}
-                  />
-                </Box>
-              ) : (
-                <Typography
-                  variant="body1"
-                  sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
-                >
-                  No failed deployments found.
+                )}
+
+                <Typography variant="h6" gutterBottom>
+                  Detailed Failure Stats
                 </Typography>
-              )}
-
-              <Typography variant="h6" gutterBottom>
-                Detailed Failure Stats
-              </Typography>
-              <Typography variant="body1" paragraph>
-                Breakdown of failure rates and totals for each module across all projects.
-              </Typography>
-              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Module / Stack Name</TableCell>
-                      <TableCell align="right">Total Deployments</TableCell>
-                      <TableCell align="right" sx={{ color: 'error.main' }}>
-                        Failed
-                      </TableCell>
-                      <TableCell align="right">Failure Rate</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {stats.map((row) => (
-                      <TableRow key={row.module}>
-                        <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
-                          <MuiLink
-                            component="button"
-                            variant="body2"
-                            onClick={() => handleModuleClick(row.module)}
-                            underline="hover"
-                            sx={{ fontWeight: 'medium', textAlign: 'left' }}
-                          >
-                            {row.module}
-                          </MuiLink>
-                        </TableCell>
-                        <TableCell align="right">{row.total}</TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            color: row.failed > 0 ? 'error.main' : 'inherit',
-                            fontWeight: row.failed > 0 ? 'bold' : 'normal',
-                          }}
-                        >
-                          {row.failed}
-                        </TableCell>
-                        <TableCell align="right">{row.rate.toFixed(1)}%</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </InfoCard>
-          </Grid>
-
-          {/* Active Errors List & Filter */}
-          <Grid size={12}>
-            <InfoCard title="Active Errors">
-              <Typography variant="body1" paragraph>
-                Review and diagnose current deployment errors. Use filters to narrow down by module,
-                region, or account.
-              </Typography>
-              <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
-                <Autocomplete
-                  options={modules}
-                  getOptionLabel={(option) => option.module || option.module_name || ''}
-                  value={selectedModule}
-                  onChange={(_, newValue) => setSelectedModule(newValue)}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Filter by Module / Stack"
-                      variant="outlined"
-                      placeholder="All Modules / Stacks"
-                    />
-                  )}
-                  sx={{ flexGrow: 1 }}
-                />
-                <Autocomplete
-                  options={uniqueRegions}
-                  value={selectedRegion}
-                  onChange={(_, newValue) => setSelectedRegion(newValue)}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Filter by Region"
-                      variant="outlined"
-                      placeholder="All Regions"
-                    />
-                  )}
-                  sx={{ flexGrow: 1 }}
-                />
-                <Autocomplete
-                  options={uniqueAccounts}
-                  value={selectedAccount}
-                  onChange={(_, newValue) => setSelectedAccount(newValue)}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Filter by Account"
-                      variant="outlined"
-                      placeholder="All Accounts"
-                    />
-                  )}
-                  sx={{ flexGrow: 1 }}
-                />
-              </Box>
-
-              <Typography variant="h6" gutterBottom>
-                Current active errors list ({allErrors.length})
-              </Typography>
-              {allErrors.length === 0 ? (
-                <Typography
-                  variant="body1"
-                  sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
-                >
-                  No active errors found {selectedModule ? 'for this module' : ''}.
+                <Typography variant="body1" paragraph>
+                  Breakdown of failure rates and totals for each module across all projects.
                 </Typography>
-              ) : (
-                <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 800 }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Module / Stack</TableCell>
-                        <TableCell>Deployment ID</TableCell>
-                        <TableCell>Environment</TableCell>
-                        <TableCell>Region</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Error Info</TableCell>
+                        <TableCell>Module / Stack Name</TableCell>
+                        <TableCell align="right">Total Deployments</TableCell>
+                        <TableCell align="right" sx={{ color: 'error.main' }}>
+                          Failed
+                        </TableCell>
+                        <TableCell align="right">Failure Rate</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {allErrors.map((d) => (
-                        <TableRow key={d.deployment_id}>
-                          <TableCell sx={{ fontWeight: 'medium' }}>{d.module}</TableCell>
-                          <TableCell>
-                            <Link to={`/infraweave/deployment/${d.environment}/${d.deployment_id}`}>
-                              {d.deployment_id}
-                            </Link>
-                          </TableCell>
-                          <TableCell>{d.environment}</TableCell>
-                          <TableCell>{d.region}</TableCell>
-                          <TableCell sx={{ color: 'error.main' }}>{d.status}</TableCell>
-                          <TableCell>
-                            <Typography
-                              variant="caption"
-                              color="error"
-                              sx={{ fontFamily: 'monospace' }}
+                      {stats.map((row) => (
+                        <TableRow key={row.key}>
+                          <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
+                            <MuiLink
+                              component="button"
+                              variant="body2"
+                              onClick={() => handleEntryClick(row.entry)}
+                              underline="hover"
+                              sx={{ fontWeight: 'medium', textAlign: 'left' }}
                             >
-                              {d.error_text || 'Unknown failure reason'}
-                            </Typography>
+                              {row.label}
+                            </MuiLink>
                           </TableCell>
+                          <TableCell align="right">{row.total}</TableCell>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              color: row.failed > 0 ? 'error.main' : 'inherit',
+                              fontWeight: row.failed > 0 ? 'bold' : 'normal',
+                            }}
+                          >
+                            {row.failed}
+                          </TableCell>
+                          <TableCell align="right">{row.rate.toFixed(1)}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              )}
-            </InfoCard>
+              </InfoCard>
+            </Grid>
+
+            {/* Active Errors List & Filter */}
+            <Grid size={12} ref={activeErrorsRef} sx={{ scrollMarginTop: 16 }}>
+              <InfoCard title="Active Errors">
+                <Typography variant="body1" paragraph>
+                  Review and diagnose current deployment errors. Use filters to narrow down by
+                  module, region, or account.
+                </Typography>
+                <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
+                  <Autocomplete
+                    options={entryOptions}
+                    getOptionLabel={entryLabel}
+                    isOptionEqualToValue={(option, value) => entryKey(option) === entryKey(value)}
+                    value={selectedEntry}
+                    onChange={(_, newValue) => setSelectedEntry(newValue)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Filter by Module / Stack"
+                        variant="outlined"
+                        placeholder="All Modules / Stacks"
+                      />
+                    )}
+                    sx={{ flexGrow: 1 }}
+                  />
+                  <Autocomplete
+                    options={uniqueRegions}
+                    value={selectedRegion}
+                    onChange={(_, newValue) => setSelectedRegion(newValue)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Filter by Region"
+                        variant="outlined"
+                        placeholder="All Regions"
+                      />
+                    )}
+                    sx={{ flexGrow: 1 }}
+                  />
+                  <Autocomplete
+                    options={uniqueAccounts}
+                    value={selectedAccount}
+                    onChange={(_, newValue) => setSelectedAccount(newValue)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Filter by Account"
+                        variant="outlined"
+                        placeholder="All Accounts"
+                      />
+                    )}
+                    sx={{ flexGrow: 1 }}
+                  />
+                </Box>
+
+                <Typography variant="h6" gutterBottom>
+                  Current active errors list ({allErrors.length})
+                </Typography>
+                {allErrors.length === 0 ? (
+                  <Typography
+                    variant="body1"
+                    sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}
+                  >
+                    {filtering ? 'No active errors match the filters.' : 'No active errors found.'}
+                  </Typography>
+                ) : (
+                  <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 800 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Module / Stack</TableCell>
+                          <TableCell>Deployment ID</TableCell>
+                          <TableCell>Environment</TableCell>
+                          <TableCell>Region</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Error Info</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {allErrors.map((d) => (
+                          <TableRow key={deploymentKey(d)}>
+                            <TableCell sx={{ fontWeight: 'medium' }}>
+                              {entryLabel(entryOf(d))}
+                            </TableCell>
+                            <TableCell>
+                              <Link to={deploymentLink(d)}>{d.deployment_id}</Link>
+                            </TableCell>
+                            <TableCell>{d.environment}</TableCell>
+                            <TableCell>{d.region}</TableCell>
+                            <TableCell sx={{ color: 'error.main' }}>{d.status}</TableCell>
+                            <TableCell>
+                              <Typography
+                                variant="caption"
+                                color="error"
+                                sx={{ fontFamily: 'monospace' }}
+                              >
+                                {d.error_text || 'Unknown failure reason'}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </InfoCard>
+            </Grid>
           </Grid>
-        </Grid>
+        </FleetGate>
       </Grid>
     </Grid>
   );
@@ -1258,7 +983,14 @@ const DashboardCard = ({
   <Card sx={{ height: '100%' }}>
     <CardActionArea
       onClick={onClick}
-      sx={{ height: '100%', alignItems: 'flex-start', justifyContent: 'flex-start' }}
+      // Column flex keeps content top-aligned; buttons centre it vertically by default.
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+      }}
     >
       <CardContent sx={{ p: 2.5 }}>
         <Box
@@ -1304,12 +1036,16 @@ export const AdoptionHealthPage = () => {
     }
   };
 
+  // Legacy route for the combined modules and stacks page.
   if (subView === 'usage') {
+    return <Navigate to="/infraweave/adoption-health/module-usage" replace />;
+  }
+
+  if (subView === 'module-usage' || subView === 'stack-usage') {
+    const kind: UsageKind = subView === 'stack-usage' ? 'stack' : 'module';
     return (
-      <ModuleUsageView
-        onBack={() => handleNavigate('dashboard')}
-        onViewIssues={() => handleNavigate('issues')}
-      />
+      // Keyed so switching views resets the selection.
+      <UsageView key={kind} kind={kind} onBack={() => handleNavigate('dashboard')} />
     );
   }
 
@@ -1332,13 +1068,23 @@ export const AdoptionHealthPage = () => {
         description="Which module and stack versions are deployed where, and which deployments are failing."
       />
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
           <DashboardCard
-            icon={<AssessmentIcon />}
+            icon={<ModuleIcon />}
             tone="primary"
             title="Module Usage"
-            description="Analyze deployment distribution across versions and regions. Track adoption of new module versions."
-            onClick={() => handleNavigate('usage')}
+            description="Which modules are deployed, where, and on which versions. Track adoption of new module versions."
+            onClick={() => handleNavigate('module-usage')}
+          />
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+          <DashboardCard
+            icon={<StackIcon />}
+            tone="primary"
+            title="Stack Usage"
+            description="Which stacks are deployed, where, and on which versions. Track adoption of new stack versions."
+            onClick={() => handleNavigate('stack-usage')}
           />
 
           {/* Velocity Card */}
@@ -1360,7 +1106,7 @@ export const AdoptionHealthPage = () => {
             </Grid> */}
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
           <DashboardCard
             icon={<MonitorHeartIcon />}
             tone="success"
@@ -1370,7 +1116,7 @@ export const AdoptionHealthPage = () => {
           />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 3 }}>
           <DashboardCard
             icon={<ReportProblemIcon />}
             tone="warning"

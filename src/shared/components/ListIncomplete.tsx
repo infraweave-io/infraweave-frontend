@@ -6,6 +6,8 @@ type ListIncompleteProps = {
   label: string;
   /** Overrides the page-cap wording, e.g. when a request failed rather than hit the cap. */
   reason?: string;
+  /** How to try again when a reload would not help, e.g. a cached list with a Refresh button. */
+  retry?: string;
 };
 
 /**
@@ -14,10 +16,14 @@ type ListIncompleteProps = {
  * `usePaginatedItems` exists to fix — so it has to reach the user, not just the
  * console.
  */
-export const ListIncomplete = ({ label, reason }: ListIncompleteProps) => (
+export const ListIncomplete = ({
+  label,
+  reason,
+  retry = 'Reload to try again.',
+}: ListIncompleteProps) => (
   <Alert severity="warning" sx={{ mt: 2 }}>
     {`This list is incomplete: loading ${label} ${
       reason ?? 'stopped before the registry was exhausted'
-    }. Reload to try again.`}
+    }. ${retry}`}
   </Alert>
 );
