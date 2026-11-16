@@ -11,6 +11,20 @@ describe('ListIncomplete', () => {
     );
   });
 
+  it('says how to try again when a reload is not the way', () => {
+    const { container } = render(
+      <ListIncomplete
+        label="deployments"
+        reason="stopped early"
+        retry="Use Refresh to try again."
+      />,
+    );
+
+    expect(container.textContent).toBe(
+      'This list is incomplete: loading deployments stopped early. Use Refresh to try again.',
+    );
+  });
+
   it('falls back to the page-cap reason', () => {
     const { container } = render(<ListIncomplete label="modules" />);
 
