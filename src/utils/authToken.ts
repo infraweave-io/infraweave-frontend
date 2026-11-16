@@ -74,9 +74,11 @@ export const clearSession = (): void => {
   clearFleetCache();
 };
 
+// Reload rather than go to '/': the login page renders at the current URL,
+// so it is kept as the post-login return path.
 const clearAuthAndRedirect = () => {
   clearSession();
-  window.location.href = '/';
+  window.location.reload();
 };
 
 const performRefresh = async (): Promise<string | null> => {

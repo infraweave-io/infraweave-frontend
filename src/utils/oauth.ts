@@ -180,6 +180,7 @@ export type OAuthFlowState = {
   state: string;
   codeVerifier: string;
   redirectUri: string;
+  returnTo?: string;
 };
 
 export const saveFlowState = (state: OAuthFlowState) => {
@@ -198,6 +199,27 @@ export const loadFlowState = (): OAuthFlowState | null => {
 
 export const clearFlowState = () => {
   sessionStorage.removeItem(FLOW_STORAGE_KEY);
+};
+
+/**
+ * Validates a post-login return path. Returns it normalized if it is a
+ * same-origin path outside the callback routes, otherwise null — guards
+ * against open redirects.
+ */
+export const safeReturnTo = (returnTo?: string): string | null => {
+  if (!returnTo) return null;
+  if (!returnTo.startsWith('/') || returnTo.startsWith('//')) return null;
+  let url: URL;
+  try {
+    url = new URL(returnTo, window.location.origin);
+  } catch {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+  // React Router matches case-insensitively, so /CALLBACK still hits the callback route.
+  const path = url.pathname.toLowerCase();
+  if (path.startsWith('/callback') || path.startsWith('/auth/callback')) return null;
+  return url.pathname + url.search + url.hash;
 };
 
 // ---------------------------------------------------------------------------

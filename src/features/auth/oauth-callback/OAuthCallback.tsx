@@ -7,6 +7,7 @@ import {
   extractUserInfo,
   getProvider,
   loadFlowState,
+  safeReturnTo,
 } from '../../../utils/oauth';
 
 // Prevents duplicate token exchanges across StrictMode double-invocation or
@@ -83,7 +84,7 @@ export const OAuthCallback: React.FC = () => {
         sessionStorage.setItem('oauth_processed_code', code);
         clearFlowState();
 
-        window.location.href = '/';
+        window.location.replace(safeReturnTo(flow.returnTo) ?? '/');
       } catch (err) {
         console.error('OAuth callback error:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');
