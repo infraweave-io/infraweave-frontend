@@ -22,6 +22,8 @@ export type FleetDeployments = {
   stackCatalogue: Module[];
   /** Account display names by project id. */
   projectNames: Record<string, string>;
+  /** The regions each visible account is configured for, by project id. */
+  projectRegions: Record<string, string[]>;
   /** Every region any visible account deploys to. */
   regions: string[];
   /** The last loaded fleet. Stays in place while a refresh runs. */
@@ -181,6 +183,10 @@ export const useFleetDeployments = (): FleetDeployments => {
     () => Object.fromEntries(projects.map((p) => [p.project_id, p.name || p.project_id])),
     [projects],
   );
+  const projectRegions = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.project_id, p.regions || []])),
+    [projects],
+  );
 
   // Keyed by value: the project list is republished on every background refresh, and only
   // a change in visible accounts or regions should start a load.
@@ -250,6 +256,7 @@ export const useFleetDeployments = (): FleetDeployments => {
     moduleCatalogue: catalogue.modules,
     stackCatalogue: catalogue.stacks,
     projectNames,
+    projectRegions,
     regions,
     deployments,
     fetchedAt: fleet.fetchedAt,

@@ -68,6 +68,28 @@ describe('DeploymentsDialog', () => {
     expect(screen.getByText('No deployments found for this module.')).toBeInTheDocument();
   });
 
+  it('selects nothing for an account the caller asked for that is not visible', async () => {
+    const t = setup();
+    render(
+      t.wrap(
+        <DeploymentsDialog
+          open
+          onClose={() => {}}
+          moduleName="mod"
+          version=""
+          initialProjectIds={['999']}
+        />,
+      ),
+    );
+    await t.flush();
+    await t.answer(isProjects, () => json(PROJECTS));
+
+    expect(t.requested.filter(isDeployments)).toEqual([]);
+    expect(
+      screen.getByText('Select at least one project and one region to see deployments.'),
+    ).toBeInTheDocument();
+  });
+
   it('stops paging once closed', async () => {
     const t = setup();
     const { unmount } = render(

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, Tooltip, Typography } from '@mui/material';
+import { Box, LinearProgress, Paper, Tooltip, Typography } from '@mui/material';
 import { StatusKind, statusKind } from '../../../utils/deploymentStatus';
 import { StatusTone } from '../../../shared/components/StatusChip';
 
@@ -45,6 +45,24 @@ export const Metric = ({
       </Typography>
     </Tooltip>
   </Paper>
+);
+
+export const CountBar = ({ count, max, label }: { count: number; max: number; label: string }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+    <LinearProgress
+      variant="determinate"
+      value={max > 0 ? (count / max) * 100 : 0}
+      aria-label={label}
+      sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
+    />
+    <Typography
+      variant="body2"
+      color={count > 0 ? 'text.primary' : 'text.secondary'}
+      sx={{ minWidth: 32, textAlign: 'right' }}
+    >
+      {count}
+    </Typography>
+  </Box>
 );
 
 /** Waits a frame so the state change that fills the section has rendered first. */
