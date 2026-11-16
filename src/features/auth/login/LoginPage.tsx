@@ -45,9 +45,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const state = generateState();
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
+      const returnTo = window.location.pathname + window.location.search + window.location.hash;
 
       clearFlowState();
-      saveFlowState({ providerId: provider.id, state, codeVerifier, redirectUri });
+      saveFlowState({ providerId: provider.id, state, codeVerifier, redirectUri, returnTo });
 
       window.location.href = buildAuthorizeUrl(provider, redirectUri, state, codeChallenge);
     } catch (err) {

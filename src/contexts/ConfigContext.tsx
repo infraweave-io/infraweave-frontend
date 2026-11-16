@@ -118,7 +118,8 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({
             }
             if (response.status === 401) {
               clearSession();
-              window.location.href = '/';
+              // Reload keeps the current URL so login returns here.
+              window.location.reload();
             }
           }
 
