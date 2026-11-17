@@ -58,7 +58,7 @@ const EMPTY: FleetSnapshot = { deployments: [], fetchedAt: 0, loading: false };
  * `iss|sub`, since a subject is only unique within its issuer. Null (memory only) when either
  * is missing; a username or email is not unique across providers, so it is no fallback.
  */
-const currentOwner = (): string | null => {
+export const currentOwner = (): string | null => {
   try {
     const token = localStorage.getItem('auth_token');
     if (!token) return null;
