@@ -4,6 +4,7 @@ import { useProjects } from '../../../hooks/useProjects';
 import { Deployment } from '../../../types/Deployment';
 import { Module } from '../../../types/Module';
 import { FetchProgress, IncompleteReason } from '../../../utils/deploymentFetch';
+import { useCachedQuery } from '../../../utils/queryCache';
 import {
   getFleetSnapshot,
   needsFleetLoad,
@@ -53,8 +54,8 @@ export type FleetDeployments = {
   incomplete?: IncompleteReason;
   /** Set when the accounts could not be loaded at all. */
   error: Error | null;
-  /** Loads the fleet again now, whatever its age. */
-  refresh: () => void;
+  /** Loads the fleet and the catalogue again now, whatever their age. Settles once both are in. */
+  refresh: () => Promise<void>;
 };
 
 const CATALOGUE_FIELDS = 'fields=module,module_name,track,version';
@@ -84,7 +85,7 @@ type Catalogue = {
   complete: boolean;
 };
 
-type CataloguePages = { items: Module[]; complete: boolean };
+export type CataloguePages = { items: Module[]; complete: boolean };
 
 const fetchRegistryPage = async (
   config: CatalogueConfig,
@@ -102,7 +103,7 @@ const fetchRegistryPage = async (
 };
 
 /** Follows `x-next-token` to the end: the registry is read in 1MB pages and records are large. */
-const fetchAllRegistryPages = async (
+export const fetchAllRegistryPages = async (
   config: CatalogueConfig,
   path: string,
 ): Promise<CataloguePages> => {
@@ -150,36 +151,27 @@ export const fetchCatalogue = async (config: CatalogueConfig): Promise<Catalogue
   };
 };
 
+const EMPTY_CATALOGUE: Catalogue = { modules: [], stacks: [], complete: true };
+
 export const useFleetDeployments = (): FleetDeployments => {
   const config = useConfig();
   const { projects, loading: loadingProjects, error: projectsError } = useProjects();
   const fleet = useSyncExternalStore(subscribeToFleet, getFleetSnapshot);
 
-  const [catalogue, setCatalogue] = useState<Catalogue>({
-    modules: [],
-    stacks: [],
-    complete: true,
-  });
-  const [loadingModules, setLoadingModules] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingModules(true);
-    fetchCatalogue(config)
-      .then((items) => {
-        if (!cancelled) setCatalogue(items);
-      })
-      .catch((err) => {
-        console.error('Failed to load the module and stack list', err);
-        if (!cancelled) setCatalogue({ modules: [], stacks: [], complete: false });
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingModules(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [config]);
+  // Shared through the query cache, so the Overview's widgets make one request between them.
+  const catalogueQuery = useCachedQuery('fleet-catalogue', () =>
+    fetchCatalogue(config).catch((err) => {
+      console.error('Failed to load the module and stack list', err);
+      throw err;
+    }),
+  );
+  const loadingModules = catalogueQuery.loading;
+  const reloadCatalogue = catalogueQuery.reload;
+  // A failed reload keeps the lists from before it, marked as possibly short.
+  const loadedCatalogue = catalogueQuery.data ?? EMPTY_CATALOGUE;
+  const catalogue = catalogueQuery.error
+    ? { ...loadedCatalogue, complete: false }
+    : loadedCatalogue;
 
   // By value, so `regions` and `load` keep their identity when the project list is
   // republished unchanged.
@@ -212,9 +204,9 @@ export const useFleetDeployments = (): FleetDeployments => {
   );
   const scope = `${projectIdsKey}|${regionsKey}`;
 
-  const load = useCallback(() => {
-    if (regions.length === 0) return;
-    loadFleet(config, {
+  const load = useCallback((): Promise<void> => {
+    if (regions.length === 0) return Promise.resolve();
+    return loadFleet(config, {
       scope,
       regions,
       // Only used when the backend lacks the fleet route. A short catalogue would silently
@@ -226,6 +218,11 @@ export const useFleetDeployments = (): FleetDeployments => {
         }),
     });
   }, [config, regions, scope]);
+
+  const refresh = useCallback(
+    () => Promise.all([load(), reloadCatalogue()]).then(() => undefined),
+    [load, reloadCatalogue],
+  );
 
   // `load` only changes with the scope or the config, so a project list republished
   // unchanged does not rerun this.
@@ -282,6 +279,6 @@ export const useFleetDeployments = (): FleetDeployments => {
     incomplete: fleet.incomplete,
     // A failed project refresh over a cached list is not worth blanking the page for.
     error: projects.length === 0 ? projectsError ?? null : null,
-    refresh: load,
+    refresh,
   };
 };

@@ -149,19 +149,22 @@ const fetchAllPages = async (
   path: string,
   onPage: (rows: Deployment[]) => void,
   signal?: AbortSignal,
+  maxPages = MAX_PAGES,
 ): Promise<IncompleteReason | 'not-found' | undefined> => {
   let nextToken: string | null = null;
   let collected = 0;
   // Guards against a backend that keeps returning the same token.
   const seenTokens = new Set<string>();
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  // getApiUrl picks a regional endpoint from a region segment in the path, which a
+  // trailing query would hide, so the query and the token go on after resolving.
+  const [route, query] = path.split('?');
+
+  for (let page = 0; page < maxPages; page++) {
     // The caller has moved on and ignores the result, so stop asking.
     if (signal?.aborted) return 'request-failed';
     try {
-      // getApiUrl picks a regional endpoint from a region segment in the path, which a
-      // trailing query would hide, so the token goes on after resolving.
-      const base = config.getApiUrl(path);
+      const base = `${config.getApiUrl(route)}${query ? `?${query}` : ''}`;
       const url = nextToken ? withNextToken(base, nextToken) : base;
       const response = await config.fetch(url, { signal });
       // Route missing. The fleet fetch falls back instead of reporting a short list.
@@ -199,7 +202,7 @@ const fetchAllPages = async (
   }
 
   console.warn(
-    `Stopped loading ${path} after ${MAX_PAGES} pages (${collected} deployments); the list may be incomplete`,
+    `Stopped loading ${path} after ${maxPages} pages (${collected} deployments); the list may be incomplete`,
   );
   return 'page-limit';
 };
@@ -405,4 +408,52 @@ export const fetchDeployments = async (
     reasons.map((reason) => (reason === 'not-found' ? 'request-failed' : reason)).find(Boolean),
   );
   return pages.flat();
+};
+
+/** What the history route lists: plan runs, or deployments that were destroyed. */
+export type HistoryType = 'plans' | 'deleted';
+
+/** One account in one region, which is what the history route is asked about. */
+export type HistorySource = { projectId: string; region: string };
+
+const historyPath = ({ projectId, region }: HistorySource, type: HistoryType): string =>
+  `api/proxy/api/infraweave/api/v1/deployments/history/${projectId}/${region}?type=${type}`;
+
+/**
+ * Pages per account and region. The route reads whole records in 1MB pages, keyed by
+ * deployment rather than time, so every page is needed to find the newest; this only stops
+ * a runaway account from holding up the rest.
+ */
+const MAX_HISTORY_PAGES = 10;
+
+/**
+ * Every plan run or destroyed deployment in the given accounts and regions, in no
+ * particular order. A failed account is left out and reported as `incomplete`; only when
+ * every one fails does this throw.
+ */
+export const fetchDeploymentHistory = async (
+  config: FetchConfig,
+  type: HistoryType,
+  sources: HistorySource[],
+): Promise<{ records: Deployment[]; incomplete?: IncompleteReason }> => {
+  const pages = sources.map((): Deployment[] => []);
+  const reasons = await mapWithConcurrency(
+    sources.map((source, index) => ({ source, index })),
+    MAX_CONCURRENT_REQUESTS,
+    ({ source, index }) =>
+      fetchAllPages(
+        config,
+        historyPath(source, type),
+        (rows) => pages[index].push(...rows),
+        undefined,
+        MAX_HISTORY_PAGES,
+      ),
+  );
+
+  // This route always exists, so a 404 is a failed request.
+  const failures = reasons.map((reason) => (reason === 'not-found' ? 'request-failed' : reason));
+  if (sources.length > 0 && failures.every((reason) => reason === 'request-failed')) {
+    throw new Error(`The ${type === 'plans' ? 'plan' : 'destroy'} history could not be loaded`);
+  }
+  return { records: pages.flat(), incomplete: failures.find(Boolean) };
 };
