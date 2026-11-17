@@ -1,6 +1,6 @@
 /**
  * Pages the user opened recently, newest first. Written on every route change by
- * `useRecordVisits` and read by the Recently visited widget, which is not mounted while the
+ * `RecordVisits` and read by the Recently visited widget, which is not mounted while the
  * user browses, so the recording cannot live in the widget.
  */
 
