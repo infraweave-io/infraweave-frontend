@@ -62,6 +62,8 @@ const useUsageViewData = (
 
   return { registered, kindDeployments, options, selectedDeployments };
 };
+const asOptionalSingleton = (value: string | undefined): string[] | undefined =>
+  value ? [value] : undefined;
 
 export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) => {
   const fleet = useFleetDeployments();
@@ -174,8 +176,8 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
               moduleName={selectedName}
               version={selectedVersionForModal}
               resourceType={kind}
-              initialProjectIds={filters.account ? [filters.account] : undefined}
-              initialRegions={filters.region ? [filters.region] : undefined}
+              initialProjectIds={asOptionalSingleton(filters.account)}
+              initialRegions={asOptionalSingleton(filters.region)}
             />
           )}
         </FleetGate>

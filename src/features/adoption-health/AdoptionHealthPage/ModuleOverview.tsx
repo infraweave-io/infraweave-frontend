@@ -61,39 +61,32 @@ type Summary = {
 
 const UNVERSIONED = 'unknown';
 
-const summarize = (deployments: Deployment[]): Summary => {
-  const byVersion = new Map<
-    string,
-    VersionRow & { accountIds: Set<string>; regionIds: Set<string> }
-  >();
-  const byAccount = new Map<string, AccountRow & { versionSet: Set<string> }>();
-  const byStatus = new Map<string, number>();
-  const regions = new Set<string>();
+type VersionAccumulator = VersionRow & { accountIds: Set<string>; regionIds: Set<string> };
+type AccountAccumulator = AccountRow & { versionSet: Set<string> };
 
-  let failing = 0;
-  let drifted = 0;
-  let newestActivity = -Infinity;
-  let newestActivityVersion: string | undefined;
+type OverviewAccumulator = {
+  byVersion: Map<string, VersionAccumulator>;
+  byAccount: Map<string, AccountAccumulator>;
+  byStatus: Map<string, number>;
+  regions: Set<string>;
+  failing: number;
+  drifted: number;
+  newestActivity: number;
+  newestActivityVersion?: string;
+};
 
-  for (const deployment of deployments) {
-    const version = deployment.module_version || UNVERSIONED;
-    const account = deployment.project_id || UNVERSIONED;
-    const epoch = deployment.epoch ?? 0;
-    const failed = isFailedDeployment(deployment);
-    const hasDrifted = deployment.has_drifted === true;
-
-    if (deployment.region) regions.add(deployment.region);
-    if (failed) failing += 1;
-    if (hasDrifted) drifted += 1;
-    if (epoch > newestActivity) {
-      newestActivity = epoch;
-      newestActivityVersion = version;
-    }
-
-    const status = deployment.status || UNVERSIONED;
-    byStatus.set(status, (byStatus.get(status) ?? 0) + 1);
-
-    const versionRow = byVersion.get(version) ?? {
+const addVersionDeployment = (
+  rows: Map<string, VersionAccumulator>,
+  deployment: Deployment,
+  version: string,
+  account: string,
+  failed: boolean,
+  drifted: boolean,
+  epoch: number,
+) => {
+  let row = rows.get(version);
+  if (!row) {
+    row = {
       version,
       count: 0,
       accounts: 0,
@@ -104,15 +97,28 @@ const summarize = (deployments: Deployment[]): Summary => {
       accountIds: new Set<string>(),
       regionIds: new Set<string>(),
     };
-    versionRow.count += 1;
-    versionRow.accountIds.add(account);
-    if (deployment.region) versionRow.regionIds.add(deployment.region);
-    if (failed) versionRow.failing += 1;
-    if (hasDrifted) versionRow.drifted += 1;
-    versionRow.lastActivity = Math.max(versionRow.lastActivity, epoch);
-    byVersion.set(version, versionRow);
+  }
 
-    const accountRow = byAccount.get(account) ?? {
+  row.count += 1;
+  row.accountIds.add(account);
+  if (deployment.region) row.regionIds.add(deployment.region);
+  if (failed) row.failing += 1;
+  if (drifted) row.drifted += 1;
+  row.lastActivity = Math.max(row.lastActivity, epoch);
+  rows.set(version, row);
+};
+
+const addAccountDeployment = (
+  rows: Map<string, AccountAccumulator>,
+  account: string,
+  version: string,
+  failed: boolean,
+  drifted: boolean,
+  epoch: number,
+) => {
+  let row = rows.get(account);
+  if (!row) {
+    row = {
       projectId: account,
       count: 0,
       versions: [],
@@ -121,15 +127,64 @@ const summarize = (deployments: Deployment[]): Summary => {
       lastActivity: 0,
       versionSet: new Set<string>(),
     };
-    accountRow.count += 1;
-    accountRow.versionSet.add(version);
-    if (failed) accountRow.failing += 1;
-    if (hasDrifted) accountRow.drifted += 1;
-    accountRow.lastActivity = Math.max(accountRow.lastActivity, epoch);
-    byAccount.set(account, accountRow);
   }
 
-  const versionRows = Array.from(byVersion.values())
+  row.count += 1;
+  row.versionSet.add(version);
+  if (failed) row.failing += 1;
+  if (drifted) row.drifted += 1;
+  row.lastActivity = Math.max(row.lastActivity, epoch);
+  rows.set(account, row);
+};
+
+const addOverviewCounts = (
+  summary: OverviewAccumulator,
+  deployment: Deployment,
+  failed: boolean,
+  drifted: boolean,
+) => {
+  if (deployment.region) summary.regions.add(deployment.region);
+  if (failed) summary.failing += 1;
+  if (drifted) summary.drifted += 1;
+};
+
+const updateNewestActivity = (summary: OverviewAccumulator, epoch: number, version: string) => {
+  if (epoch > summary.newestActivity) {
+    summary.newestActivity = epoch;
+    summary.newestActivityVersion = version;
+  }
+};
+
+const addDeploymentToOverview = (summary: OverviewAccumulator, deployment: Deployment) => {
+  const version = deployment.module_version || UNVERSIONED;
+  const account = deployment.project_id || UNVERSIONED;
+  const epoch = deployment.epoch ?? 0;
+  const failed = isFailedDeployment(deployment);
+  const drifted = deployment.has_drifted === true;
+
+  addOverviewCounts(summary, deployment, failed, drifted);
+  updateNewestActivity(summary, epoch, version);
+
+  const status = deployment.status || UNVERSIONED;
+  summary.byStatus.set(status, (summary.byStatus.get(status) ?? 0) + 1);
+  addVersionDeployment(summary.byVersion, deployment, version, account, failed, drifted, epoch);
+  addAccountDeployment(summary.byAccount, account, version, failed, drifted, epoch);
+};
+
+const summarize = (deployments: Deployment[]): Summary => {
+  const summary: OverviewAccumulator = {
+    byVersion: new Map(),
+    byAccount: new Map(),
+    byStatus: new Map(),
+    regions: new Set(),
+    failing: 0,
+    drifted: 0,
+    newestActivity: -Infinity,
+  };
+
+  for (const deployment of deployments) addDeploymentToOverview(summary, deployment);
+
+  const versionRows = Array.from(summary.byVersion.values())
     .map(({ accountIds, regionIds, ...row }) => ({
       ...row,
       accounts: accountIds.size,
@@ -137,22 +192,22 @@ const summarize = (deployments: Deployment[]): Summary => {
     }))
     .sort((a, b) => b.count - a.count || a.version.localeCompare(b.version));
 
-  const accountRows = Array.from(byAccount.values())
+  const accountRows = Array.from(summary.byAccount.values())
     .map(({ versionSet, ...row }) => ({ ...row, versions: Array.from(versionSet).sort() }))
     .sort((a, b) => b.count - a.count || a.projectId.localeCompare(b.projectId));
 
   return {
     total: deployments.length,
-    accounts: byAccount.size,
-    regions: regions.size,
-    failing,
-    drifted,
-    statuses: Array.from(byStatus.entries())
+    accounts: summary.byAccount.size,
+    regions: summary.regions.size,
+    failing: summary.failing,
+    drifted: summary.drifted,
+    statuses: Array.from(summary.byStatus.entries())
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
     versionRows,
     accountRows,
-    newestActivityVersion,
+    newestActivityVersion: summary.newestActivityVersion,
   };
 };
 

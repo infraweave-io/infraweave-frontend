@@ -39,6 +39,68 @@ const entryKey = (entry: IssueEntry) => `${entry.kind}:${entry.name}`;
 const entryLabel = (entry: IssueEntry) =>
   entry.kind === 'stack' ? `${entry.name} (stack)` : entry.name;
 
+type IssueStatsRow = {
+  key: string;
+  entry: IssueEntry;
+  label: string;
+  total: number;
+  failed: number;
+  rate: number;
+};
+
+type IssueCounts = { entry: IssueEntry; total: number; failed: number };
+
+const matchesIssueFilters = (
+  deployment: Deployment,
+  key: string,
+  selectedEntry: IssueEntry | null,
+  selectedRegion: string | null,
+  selectedAccount: string | null,
+) =>
+  (!selectedEntry || key === entryKey(selectedEntry)) &&
+  (!selectedRegion || deployment.region === selectedRegion) &&
+  (!selectedAccount || deployment.project_id === selectedAccount);
+
+const summarizeIssues = (
+  deployments: Deployment[],
+  entryOf: (deployment: Deployment) => IssueEntry,
+  selectedEntry: IssueEntry | null,
+  selectedRegion: string | null,
+  selectedAccount: string | null,
+) => {
+  const byEntry = new Map<string, IssueCounts>();
+  const errors: Deployment[] = [];
+
+  for (const deployment of deployments) {
+    const entry = entryOf(deployment);
+    const key = entryKey(entry);
+    const counts = byEntry.get(key) ?? { entry, total: 0, failed: 0 };
+    counts.total += 1;
+
+    const failed = isFailedDeployment(deployment);
+    if (failed) {
+      counts.failed += 1;
+      if (matchesIssueFilters(deployment, key, selectedEntry, selectedRegion, selectedAccount)) {
+        errors.push(deployment);
+      }
+    }
+
+    byEntry.set(key, counts);
+  }
+
+  const stats: IssueStatsRow[] = Array.from(byEntry.values(), ({ entry, total, failed }) => ({
+    key: entryKey(entry),
+    entry,
+    label: entryLabel(entry),
+    total,
+    failed,
+    rate: total > 0 ? (failed / total) * 100 : 0,
+  }));
+  stats.sort((a, b) => b.failed - a.failed);
+
+  return { stats, allErrors: errors };
+};
+
 export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
   const fleet = useFleetDeployments();
   const { deployments: rawDeployments } = fleet;
@@ -83,52 +145,10 @@ export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
   }, [fleet.moduleCatalogue, fleet.stackCatalogue, selectedEntry]);
 
   // Calculated during render, so the first paint already has them.
-  const { stats, allErrors } = React.useMemo(() => {
-    const byEntry = new Map<string, { entry: IssueEntry; total: number; failed: number }>();
-    const errors: Deployment[] = [];
-
-    rawDeployments.forEach((d) => {
-      const entry = entryOf(d);
-      const key = entryKey(entry);
-
-      // 1. Calculate Stats (Global - ignore filter)
-      const counts = byEntry.get(key) ?? { entry, total: 0, failed: 0 };
-      byEntry.set(key, counts);
-      counts.total++;
-
-      const isFailed = isFailedDeployment(d);
-
-      if (isFailed) {
-        counts.failed++;
-      }
-
-      // 2. Calculate Errors List (Apply Filter)
-      if (isFailed) {
-        let include = true;
-        if (selectedEntry && key !== entryKey(selectedEntry)) include = false;
-        if (selectedRegion && d.region !== selectedRegion) include = false;
-        if (selectedAccount && d.project_id !== selectedAccount) include = false;
-
-        if (include) {
-          errors.push(d);
-        }
-      }
-    });
-
-    const processed = Array.from(byEntry.values(), ({ entry, total, failed }) => ({
-      key: entryKey(entry),
-      entry,
-      label: entryLabel(entry),
-      total,
-      failed,
-      rate: total > 0 ? (failed / total) * 100 : 0,
-    }));
-
-    // Sort by failed count desc
-    processed.sort((a, b) => b.failed - a.failed);
-
-    return { stats: processed, allErrors: errors };
-  }, [rawDeployments, entryOf, selectedEntry, selectedRegion, selectedAccount]);
+  const { stats, allErrors } = React.useMemo(
+    () => summarizeIssues(rawDeployments, entryOf, selectedEntry, selectedRegion, selectedAccount),
+    [rawDeployments, entryOf, selectedEntry, selectedRegion, selectedAccount],
+  );
   const filtering = Boolean(selectedEntry || selectedRegion || selectedAccount);
 
   if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;

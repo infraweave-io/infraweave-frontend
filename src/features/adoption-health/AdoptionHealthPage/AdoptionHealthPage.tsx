@@ -4,16 +4,15 @@ import { AdoptionHealthDashboard } from './AdoptionHealthDashboard';
 import { BreakdownView } from './BreakdownView';
 import { DeploymentHealthView } from './DeploymentHealthView';
 import { ModuleIssuesView } from './ModuleIssuesView';
-import type { UsageKind } from './usageContext';
 import { UsageView } from './UsageView';
 import { VelocityView } from './VelocityView';
 
 const ADOPTION_HEALTH_PATH = '/infraweave/adoption-health';
+
 export const AdoptionHealthPage = () => {
   const { view } = useParams<{ view: string }>();
   const { search, hash } = useLocation();
   const navigate = useNavigate();
-  const subView = view || 'dashboard';
 
   const handleNavigate = (targetView: string) => {
     navigate(
@@ -22,23 +21,19 @@ export const AdoptionHealthPage = () => {
   };
   const handleBack = () => handleNavigate('dashboard');
 
-  if (subView === 'usage') {
-    return (
-      <Navigate to={{ pathname: `${ADOPTION_HEALTH_PATH}/module-usage`, search, hash }} replace />
-    );
-  }
-
-  switch (subView) {
+  switch (view) {
+    case 'usage':
+      return (
+        <Navigate to={{ pathname: `${ADOPTION_HEALTH_PATH}/module-usage`, search, hash }} replace />
+      );
     case 'module-usage':
-    case 'stack-usage': {
-      const kind: UsageKind = subView === 'stack-usage' ? 'stack' : 'module';
-      return <UsageView key={kind} kind={kind} onBack={handleBack} />;
-    }
+      return <UsageView key="module" kind="module" onBack={handleBack} />;
+    case 'stack-usage':
+      return <UsageView key="stack" kind="stack" onBack={handleBack} />;
     case 'region-usage':
-    case 'account-usage': {
-      const by = subView === 'region-usage' ? 'region' : 'account';
-      return <BreakdownView key={by} by={by} onBack={handleBack} />;
-    }
+      return <BreakdownView key="region" by="region" onBack={handleBack} />;
+    case 'account-usage':
+      return <BreakdownView key="account" by="account" onBack={handleBack} />;
     case 'velocity':
       return <VelocityView onBack={handleBack} />;
     case 'health':

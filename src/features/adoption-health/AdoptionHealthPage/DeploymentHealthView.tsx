@@ -34,7 +34,10 @@ const countBy = (
   label: (value: string) => string = (value) => value,
 ) => {
   const counts = new Map<string, number>();
-  for (const d of deployments) counts.set(key(d), (counts.get(key(d)) ?? 0) + 1);
+  for (const deployment of deployments) {
+    const id = key(deployment);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
   return Array.from(counts.entries())
     .map(([id, value]) => ({ id, value, label: label(id) }))
     .sort((a, b) => b.value - a.value);
