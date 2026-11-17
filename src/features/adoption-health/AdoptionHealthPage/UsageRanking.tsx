@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { Deployment } from '../../../types/Deployment';
 import { isFailedDeployment } from '../../../utils/deploymentStatus';
+import type { UsageKind } from './usageContext';
 
 /** Max height in px before the table scrolls instead of growing the page. */
 const TABLE_MAX_HEIGHT = 420;
@@ -65,7 +66,7 @@ const rank = (deployments: Deployment[], registered: string[]): RankingRow[] => 
 };
 
 export type UsageRankingProps = {
-  kind: 'module' | 'stack';
+  kind: UsageKind;
   /** Deployments of this kind only. */
   deployments: Deployment[];
   /** Names in the registry, so unused ones get a row as well. */
