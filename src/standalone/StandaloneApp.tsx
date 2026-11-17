@@ -38,7 +38,7 @@ import { Env } from '../utils/env';
 import { StandaloneAppBar } from './components/ComponentAdapter';
 import { PageTransition } from './components/PageTransition';
 import { AiAssistantOverlay } from '../shared/components/AiAssistantOverlay';
-import { useRecordVisits } from '../hooks/useRecordVisits';
+import { recordVisit } from '../utils/visitHistory';
 
 // Lazy-loaded route components for code splitting
 const LoginPage = React.lazy(() =>
@@ -196,8 +196,12 @@ const ScrollToTop: React.FC = () => {
   return null;
 };
 
+/** Mounted once around the routes, so every page the user opens is remembered. */
 const RecordVisits: React.FC = () => {
-  useRecordVisits();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    recordVisit(pathname);
+  }, [pathname]);
   return null;
 };
 
