@@ -13,17 +13,17 @@ export type UsageView = 'module-usage' | 'stack-usage' | 'region-usage' | 'accou
 
 export type ContextKey = 'module' | 'region' | 'account';
 
-export type ModuleKind = 'module' | 'stack';
+export type UsageKind = 'module' | 'stack';
 
 /**
- * `kind` says whether `module` names a module or a stack, since the two can share a name. It
- * only means something next to `module`, so it is dropped without one.
+ * `kind` distinguishes a module name from a stack name; names can overlap.
+ * It only means something alongside `module` (the URL key), so it is dropped without one.
  */
-export type UsageContext = Partial<Record<ContextKey, string>> & { kind?: ModuleKind };
+export type UsageContext = Partial<Record<ContextKey, string>> & { kind?: UsageKind };
 
 const CONTEXT_KEYS: ContextKey[] = ['module', 'region', 'account'];
 
-const isModuleKind = (value: string | null): value is ModuleKind =>
+const isUsageKind = (value: string | null): value is UsageKind =>
   value === 'module' || value === 'stack';
 
 export const usageHref = (view: UsageView, context: UsageContext): string => {
@@ -46,7 +46,7 @@ export const useUsageContext = () => {
     if (value) context[key] = value;
   }
   const kind = params.get('kind');
-  if (context.module && isModuleKind(kind)) context.kind = kind;
+  if (context.module && isUsageKind(kind)) context.kind = kind;
 
   const set = React.useCallback(
     (key: ContextKey, value: string | undefined) =>
@@ -55,7 +55,7 @@ export const useUsageContext = () => {
           const next = new URLSearchParams(current);
           if (value) next.set(key, value);
           else next.delete(key);
-          // The kind belongs to the module it came with.
+          // The usage kind belongs to the selected name.
           if (key === 'module') next.delete('kind');
           return next;
         },

@@ -51,12 +51,11 @@ import {
   filterSummary,
   matchesFilters,
   usageHref,
-  ModuleKind,
-  UsageContext,
   UsageLink,
   useScrollToOpenedSelection,
   useUsageContext,
 } from './usageContext';
+import type { UsageKind, UsageContext } from './usageContext';
 
 /** Region and account usage pages, one view over the cached fleet. */
 
@@ -400,7 +399,7 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
     [stackNames],
   );
   // A link without a kind takes it from the name's deployments, else from the registry.
-  const moduleKind = React.useMemo((): ModuleKind | undefined => {
+  const usageKind = React.useMemo((): UsageKind | undefined => {
     if (!context.module || context.kind) return context.kind;
     const deployment = fleet.deployments.find((d) => d.module === context.module);
     const stack = deployment ? isStack(deployment) : stackNames.has(context.module);
@@ -409,9 +408,9 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
   const filters = React.useMemo<UsageContext>(
     () =>
       by === 'region'
-        ? { module: context.module, kind: moduleKind, account: context.account }
-        : { module: context.module, kind: moduleKind, region: context.region },
-    [by, context.module, moduleKind, context.account, context.region],
+        ? { module: context.module, kind: usageKind, account: context.account }
+        : { module: context.module, kind: usageKind, region: context.region },
+    [by, context.module, usageKind, context.account, context.region],
   );
   const filtered = React.useMemo(
     () => fleet.deployments.filter((d) => matchesFilters(d, filters, isStack)),
