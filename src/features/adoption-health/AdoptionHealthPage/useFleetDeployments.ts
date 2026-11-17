@@ -86,6 +86,21 @@ type Catalogue = {
 
 type CataloguePages = { items: Module[]; complete: boolean };
 
+const fetchRegistryPage = async (
+  config: CatalogueConfig,
+  url: string,
+  path: string,
+): Promise<{ items: Module[]; nextToken: string | null }> => {
+  const response = await config.fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${path}: HTTP ${response.status}`);
+
+  const json = await response.json();
+  const items = json?.Items ?? json?.items ?? json;
+  if (!Array.isArray(items)) throw new Error(`Failed to fetch ${path}: expected a list`);
+
+  return { items: items as Module[], nextToken: response.headers.get('x-next-token') };
+};
+
 /** Follows `x-next-token` to the end: the registry is read in 1MB pages and records are large. */
 const fetchAllRegistryPages = async (
   config: CatalogueConfig,
@@ -97,14 +112,11 @@ const fetchAllRegistryPages = async (
 
   for (let page = 0; page < MAX_CATALOGUE_PAGES; page++) {
     const base = config.getApiUrl(path);
-    const response = await config.fetch(nextToken ? withNextToken(base, nextToken) : base);
-    if (!response.ok) throw new Error(`Failed to fetch ${path}: HTTP ${response.status}`);
-    const json = await response.json();
-    const pageItems = json?.Items ?? json?.items ?? json;
-    if (!Array.isArray(pageItems)) throw new Error(`Failed to fetch ${path}: expected a list`);
-    items.push(...(pageItems as Module[]));
+    const url = nextToken ? withNextToken(base, nextToken) : base;
+    const pageResult = await fetchRegistryPage(config, url, path);
+    items.push(...pageResult.items);
 
-    const token = response.headers.get('x-next-token');
+    const token = pageResult.nextToken;
     if (!token) return { items, complete: true };
     if (seenTokens.has(token)) return { items, complete: false };
     seenTokens.add(token);

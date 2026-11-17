@@ -68,16 +68,20 @@ export const useUsageContext = () => {
   return { context, set };
 };
 
-/** `isStack` is needed to honour `filters.kind`. */
 export const matchesFilters = (
   d: Deployment,
   filters: UsageContext,
   isStack?: (d: Deployment) => boolean,
-): boolean =>
-  (!filters.module || d.module === filters.module) &&
-  (!filters.module || !filters.kind || !isStack || isStack(d) === (filters.kind === 'stack')) &&
-  (!filters.region || d.region === filters.region) &&
-  (!filters.account || d.project_id === filters.account);
+): boolean => {
+  const matchesModule = !filters.module || d.module === filters.module;
+  // Kind disambiguates a selected name only when this caller can classify deployments.
+  const matchesSelectedKind =
+    !filters.module || !filters.kind || !isStack || isStack(d) === (filters.kind === 'stack');
+  const matchesRegion = !filters.region || d.region === filters.region;
+  const matchesAccount = !filters.account || d.project_id === filters.account;
+
+  return matchesModule && matchesSelectedKind && matchesRegion && matchesAccount;
+};
 
 export const UsageLink = ({ to, children }: { to: string; children: React.ReactNode }) => (
   <MuiLink

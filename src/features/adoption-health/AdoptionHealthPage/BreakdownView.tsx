@@ -55,13 +55,16 @@ import {
   useScrollToOpenedSelection,
   useUsageContext,
 } from './usageContext';
-import type { UsageKind, UsageContext } from './usageContext';
+import type { ContextKey, UsageKind, UsageContext } from './usageContext';
 
 /** Region and account usage pages, one view over the cached fleet. */
 
 export type BreakdownDimension = 'region' | 'account';
 
 /** `breakdownOf` and `other*` refer to the dimension each group splits into. */
+type GroupDescription = { label: string; name?: string; hint?: string };
+
+/** Each dimension supplies labels for its groups and nested breakdown. */
 type DimensionSpec = {
   noun: string;
   title: string;
@@ -71,6 +74,19 @@ type DimensionSpec = {
   breakdownOf: GroupOf;
   otherLabel: string;
   otherCount: (row: { accounts: number; regions: number }) => number;
+  describe: (key: string, projectNames: Record<string, string>) => GroupDescription;
+  describeBreakdown: (key: string, projectNames: Record<string, string>) => GroupDescription;
+};
+
+const describeRegion = (key: string): GroupDescription => ({ label: key, name: regionName(key) });
+const describeAccount = (
+  projectId: string,
+  projectNames: Record<string, string>,
+): GroupDescription => {
+  const name = projectNames[projectId];
+  return name && name !== projectId
+    ? { label: name, name: projectId, hint: projectId }
+    : { label: projectId };
 };
 
 const DIMENSIONS: Record<BreakdownDimension, DimensionSpec> = {
@@ -84,6 +100,8 @@ const DIMENSIONS: Record<BreakdownDimension, DimensionSpec> = {
     breakdownOf: byAccount,
     otherLabel: 'Accounts',
     otherCount: (row) => row.accounts,
+    describe: (key) => describeRegion(key),
+    describeBreakdown: (key, projectNames) => describeAccount(key, projectNames),
   },
   account: {
     noun: 'account',
@@ -95,6 +113,8 @@ const DIMENSIONS: Record<BreakdownDimension, DimensionSpec> = {
     breakdownOf: byRegion,
     otherLabel: 'Regions',
     otherCount: (row) => row.regions,
+    describe: (key, projectNames) => describeAccount(key, projectNames),
+    describeBreakdown: (key) => describeRegion(key),
   },
 };
 
@@ -380,6 +400,130 @@ const GroupOverview = ({
   );
 };
 
+const selectionOptions = (rows: GroupRow[], selected: string): string[] => {
+  const options = rows.map((row) => row.key);
+  return selected && !options.includes(selected) ? [...options, selected] : options;
+};
+
+const BreakdownContent = ({
+  fleet,
+  onBack,
+  spec,
+  projectNames,
+  filters,
+  set,
+  filtered,
+  filtering,
+  selected,
+  setSelected,
+  overviewRef,
+  rows,
+  selectFromRanking,
+  optionLabel,
+  summary,
+  describe,
+  describeBreakdown,
+  entryHref,
+  breakdownHref,
+}: {
+  fleet: ReturnType<typeof useFleetDeployments>;
+  onBack: () => void;
+  spec: DimensionSpec;
+  projectNames: Record<string, string>;
+  filters: UsageContext;
+  set: (key: ContextKey, value: string | undefined) => void;
+  filtered: Deployment[];
+  filtering: boolean;
+  selected: string;
+  setSelected: (key: string) => void;
+  overviewRef: React.Ref<HTMLDivElement>;
+  rows: GroupRow[];
+  selectFromRanking: (key: string) => void;
+  optionLabel: (key: string) => string;
+  summary: GroupSummary | null;
+  describe: (key: string) => GroupDescription;
+  describeBreakdown: (key: string) => GroupDescription;
+  entryHref: (row: EntryRow) => string;
+  breakdownHref: (key: string) => string;
+}) => (
+  <Grid container spacing={3}>
+    <Grid size={12}>
+      <Box mb={2}>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
+          Back to Dashboard
+        </Button>
+      </Box>
+      <FleetGate
+        fleet={fleet}
+        scope={filtering ? { deployments: filtered, noun: 'deployment' } : undefined}
+      >
+        <ContextFilters
+          filters={filters}
+          projectNames={projectNames}
+          onClear={(key) => set(key, undefined)}
+        />
+        <Card variant="outlined" sx={{ width: '100%', mb: 3 }}>
+          <CardHeader
+            title={spec.title}
+            titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          />
+          <CardContent>
+            <Typography variant="body1" paragraph>
+              {spec.description}
+            </Typography>
+            <GroupRanking
+              spec={spec}
+              rows={rows}
+              selected={selected}
+              onSelect={selectFromRanking}
+              describe={describe}
+            />
+          </CardContent>
+        </Card>
+
+        <Card ref={overviewRef} variant="outlined" sx={{ width: '100%', mb: 3 }}>
+          <CardHeader
+            title={spec.overviewTitle}
+            subheader={filterSummary(filters, projectNames)}
+            titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          />
+          <CardContent>
+            <Box sx={{ display: 'flex', gap: 2, mb: selected ? 3 : 0 }}>
+              <Autocomplete
+                // The page's own selection from a link is offered even when nothing runs there.
+                options={selectionOptions(rows, selected)}
+                getOptionLabel={optionLabel}
+                value={selected || null}
+                onChange={(_, value) => setSelected(value ?? '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label={`Select ${spec.noun === 'region' ? 'Region' : 'Account'}`}
+                    variant="outlined"
+                  />
+                )}
+                sx={{ width: 360 }}
+              />
+            </Box>
+            {selected && summary && (
+              <GroupOverview
+                spec={spec}
+                label={describe(selected).label}
+                summary={summary}
+                describeBreakdown={describeBreakdown}
+                entryHref={entryHref}
+                breakdownHref={breakdownHref}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </FleetGate>
+    </Grid>
+  </Grid>
+);
+
 export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: () => void }) => {
   const fleet = useFleetDeployments();
   const { projectNames, projectRegions } = fleet;
@@ -417,15 +561,8 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
     [fleet.deployments, filters, isStack],
   );
 
-  const describeRegion = (region: string) => ({ label: region, name: regionName(region) });
-  const describeAccount = (projectId: string) => {
-    const name = projectNames[projectId];
-    return name && name !== projectId
-      ? { label: name, name: projectId, hint: projectId }
-      : { label: projectId };
-  };
-  const describe = by === 'region' ? describeRegion : describeAccount;
-  const describeBreakdown = by === 'region' ? describeAccount : describeRegion;
+  const describe = (key: string) => spec.describe(key, projectNames);
+  const describeBreakdown = (key: string) => spec.describeBreakdown(key, projectNames);
 
   // Configured groups, narrowed by the filters, so groups with no deployments still get a row.
   const configured = React.useMemo(() => {
@@ -486,85 +623,26 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
   if (fleet.error) return <ResponseErrorPanel error={fleet.error} />;
 
   return (
-    <Grid container spacing={3}>
-      <Grid size={12}>
-        <Box mb={2}>
-          <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
-            Back to Dashboard
-          </Button>
-        </Box>
-        <FleetGate
-          fleet={fleet}
-          scope={filtering ? { deployments: filtered, noun: 'deployment' } : undefined}
-        >
-          <ContextFilters
-            filters={filters}
-            projectNames={projectNames}
-            onClear={(key) => set(key, undefined)}
-          />
-          <Card variant="outlined" sx={{ width: '100%', mb: 3 }}>
-            <CardHeader
-              title={spec.title}
-              titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
-              sx={{ borderBottom: 1, borderColor: 'divider' }}
-            />
-            <CardContent>
-              <Typography variant="body1" paragraph>
-                {spec.description}
-              </Typography>
-              <GroupRanking
-                spec={spec}
-                rows={rows}
-                selected={selected}
-                onSelect={selectFromRanking}
-                describe={describe}
-              />
-            </CardContent>
-          </Card>
-
-          <Card ref={overviewRef} variant="outlined" sx={{ width: '100%', mb: 3 }}>
-            <CardHeader
-              title={spec.overviewTitle}
-              subheader={filterSummary(filters, projectNames)}
-              titleTypographyProps={{ variant: 'h6', fontWeight: 600 }}
-              sx={{ borderBottom: 1, borderColor: 'divider' }}
-            />
-            <CardContent>
-              <Box sx={{ display: 'flex', gap: 2, mb: selected ? 3 : 0 }}>
-                <Autocomplete
-                  // The page's own selection from a link is offered even when nothing runs there.
-                  options={
-                    selected && !rows.some((row) => row.key === selected)
-                      ? [...rows.map((row) => row.key), selected]
-                      : rows.map((row) => row.key)
-                  }
-                  getOptionLabel={optionLabel}
-                  value={selected || null}
-                  onChange={(_, value) => setSelected(value ?? '')}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label={`Select ${spec.noun === 'region' ? 'Region' : 'Account'}`}
-                      variant="outlined"
-                    />
-                  )}
-                  sx={{ width: 360 }}
-                />
-              </Box>
-              {selected && summary && (
-                <GroupOverview
-                  spec={spec}
-                  label={describe(selected).label}
-                  summary={summary}
-                  describeBreakdown={describeBreakdown}
-                  entryHref={entryHref}
-                  breakdownHref={breakdownHref}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </FleetGate>
-      </Grid>
-    </Grid>
+    <BreakdownContent
+      fleet={fleet}
+      onBack={onBack}
+      spec={spec}
+      projectNames={projectNames}
+      filters={filters}
+      set={set}
+      filtered={filtered}
+      filtering={filtering}
+      selected={selected}
+      setSelected={setSelected}
+      overviewRef={overviewRef}
+      rows={rows}
+      selectFromRanking={selectFromRanking}
+      optionLabel={optionLabel}
+      summary={summary}
+      describe={describe}
+      describeBreakdown={describeBreakdown}
+      entryHref={entryHref}
+      breakdownHref={breakdownHref}
+    />
   );
 };

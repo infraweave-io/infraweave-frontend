@@ -90,6 +90,58 @@ const modeText = (fleet: FleetDeployments): string =>
     ? 'The API has no fleet endpoint yet, so this asks module by module in every region. '
     : 'One request per region, covering every module in every account you can see. ';
 
+const loadingProgressText = (fleet: FleetDeployments, finished: number, total: number): string => {
+  if (total > 0) {
+    const unit = fleet.progress?.mode === 'per-module' ? 'modules' : 'regions';
+    return `${finished} of ${total} ${unit} done`;
+  }
+  return fleet.regions.length === 0 ? 'Finding your accounts and regions...' : 'Starting...';
+};
+
+const refreshDescription = (loading: boolean, finished: number, total: number): string =>
+  loading ? `, refreshing${total > 0 ? ` (${finished}/${total})` : ''}...` : '';
+
+const FleetProgressAndNotices = ({
+  fleet,
+  total,
+  percent,
+}: {
+  fleet: FleetDeployments;
+  total: number;
+  percent: number;
+}) => (
+  <>
+    {fleet.loadingDeployments && (
+      <LinearProgress
+        variant={total > 0 ? 'determinate' : 'indeterminate'}
+        value={percent}
+        aria-label="Fleet refresh progress"
+        sx={{ mt: 1, height: 3 }}
+      />
+    )}
+    {fleet.loadFailed && (
+      <Alert severity="warning" sx={{ mt: 2 }}>
+        The last refresh failed, so these numbers are from {ago(fleet.fetchedAt)}.
+      </Alert>
+    )}
+    {/* A reload within a minute draws the same short fleet from the cache, so point at
+        Refresh, which always asks again. */}
+    {fleet.incomplete && (
+      <ListIncomplete
+        label="deployments"
+        reason={INCOMPLETE_REASON_TEXT[fleet.incomplete]}
+        retry="Use Refresh to try again."
+      />
+    )}
+    {fleet.catalogueIncomplete && (
+      <ListIncomplete
+        label="the module and stack list"
+        reason="did not finish, so modules and stacks with no deployments may be missing"
+      />
+    )}
+  </>
+);
+
 /** Shown instead of a view until the first fleet has loaded. */
 export const FleetLoadingScreen = ({ fleet }: { fleet: FleetDeployments }) => {
   const { finished, total, rows, requests, percent } = summarise(fleet.progress?.sources);
@@ -136,15 +188,7 @@ export const FleetLoadingScreen = ({ fleet }: { fleet: FleetDeployments }) => {
         sx={{ height: 8, borderRadius: 4 }}
       />
       <Stack direction="row" spacing={3} sx={{ mt: 1 }}>
-        <Typography variant="body2">
-          {total > 0
-            ? `${finished} of ${total} ${
-                fleet.progress?.mode === 'per-module' ? 'modules' : 'regions'
-              } done`
-            : fleet.regions.length === 0
-              ? 'Finding your accounts and regions...'
-              : 'Starting...'}
-        </Typography>
+        <Typography variant="body2">{loadingProgressText(fleet, finished, total)}</Typography>
         <Typography variant="body2" color="text.secondary">
           {rows} deployments so far
         </Typography>
@@ -176,8 +220,7 @@ export const FleetStatusBar = ({
         <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
           {plural(counted.length, scope?.noun ?? 'deployment')} across {plural(accounts, 'account')}
           , updated {ago(fleet.fetchedAt)}
-          {fleet.loadingDeployments &&
-            `, refreshing${total > 0 ? ` (${finished}/${total})` : ''}...`}
+          {refreshDescription(fleet.loadingDeployments, finished, total)}
         </Typography>
         <Button
           size="small"
@@ -188,34 +231,7 @@ export const FleetStatusBar = ({
           Refresh
         </Button>
       </Box>
-      {fleet.loadingDeployments && (
-        <LinearProgress
-          variant={total > 0 ? 'determinate' : 'indeterminate'}
-          value={percent}
-          aria-label="Fleet refresh progress"
-          sx={{ mt: 1, height: 3 }}
-        />
-      )}
-      {fleet.loadFailed && (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          The last refresh failed, so these numbers are from {ago(fleet.fetchedAt)}.
-        </Alert>
-      )}
-      {/* A reload within a minute draws the same short fleet from the cache, so point at
-          Refresh, which always asks again. */}
-      {fleet.incomplete && (
-        <ListIncomplete
-          label="deployments"
-          reason={INCOMPLETE_REASON_TEXT[fleet.incomplete]}
-          retry="Use Refresh to try again."
-        />
-      )}
-      {fleet.catalogueIncomplete && (
-        <ListIncomplete
-          label="the module and stack list"
-          reason="did not finish, so modules and stacks with no deployments may be missing"
-        />
-      )}
+      <FleetProgressAndNotices fleet={fleet} total={total} percent={percent} />
     </Box>
   );
 };

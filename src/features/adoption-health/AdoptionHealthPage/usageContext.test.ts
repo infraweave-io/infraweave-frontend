@@ -50,6 +50,7 @@ describe('matchesFilters', () => {
 
   it('needs every filter that is set to match', () => {
     expect(matchesFilters(d, { region: 'eu-central-1', account: '111111111111' })).toBe(true);
+    expect(matchesFilters(d, { region: 'us-east-1' })).toBe(false);
     expect(matchesFilters(d, { region: 'eu-central-1', account: '222222222222' })).toBe(false);
     expect(matchesFilters(d, { module: 's3bucket' })).toBe(false);
   });

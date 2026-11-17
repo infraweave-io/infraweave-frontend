@@ -38,6 +38,50 @@ export type GroupRow = {
   failing: number;
 };
 
+type GroupAccumulator = {
+  count: number;
+  failing: number;
+  accounts: Set<string>;
+  regions: Set<string>;
+  modules: Set<string>;
+  stacks: Set<string>;
+};
+
+const groupFor = (groups: Map<string, GroupAccumulator>, key: string) => {
+  let group = groups.get(key);
+  if (!group) {
+    group = {
+      count: 0,
+      failing: 0,
+      accounts: new Set(),
+      regions: new Set(),
+      modules: new Set(),
+      stacks: new Set(),
+    };
+    groups.set(key, group);
+  }
+  return group;
+};
+
+const addGroupDeployment = (
+  groups: Map<string, GroupAccumulator>,
+  deployment: Deployment,
+  groupOf: GroupOf,
+  isStack: (d: Deployment) => boolean,
+) => {
+  const key = groupOf(deployment);
+  if (!key) return;
+
+  const group = groupFor(groups, key);
+  group.count += 1;
+  if (deployment.project_id) group.accounts.add(deployment.project_id);
+  if (deployment.region) group.regions.add(deployment.region);
+  if (deployment.module) {
+    (isStack(deployment) ? group.stacks : group.modules).add(deployment.module);
+  }
+  if (isFailedDeployment(deployment)) group.failing += 1;
+};
+
 /** Most deployments first. Configured groups get a row even when nothing runs in them. */
 export const summarizeGroups = (
   deployments: Deployment[],
@@ -45,43 +89,10 @@ export const summarizeGroups = (
   configured: string[],
   isStack: (d: Deployment) => boolean,
 ): GroupRow[] => {
-  const groups = new Map<
-    string,
-    {
-      count: number;
-      failing: number;
-      accounts: Set<string>;
-      regions: Set<string>;
-      modules: Set<string>;
-      stacks: Set<string>;
-    }
-  >();
-  const groupFor = (key: string) => {
-    let group = groups.get(key);
-    if (!group) {
-      group = {
-        count: 0,
-        failing: 0,
-        accounts: new Set(),
-        regions: new Set(),
-        modules: new Set(),
-        stacks: new Set(),
-      };
-      groups.set(key, group);
-    }
-    return group;
-  };
-
-  for (const key of configured) groupFor(key);
-  for (const d of deployments) {
-    const key = groupOf(d);
-    if (!key) continue;
-    const group = groupFor(key);
-    group.count += 1;
-    if (d.project_id) group.accounts.add(d.project_id);
-    if (d.region) group.regions.add(d.region);
-    if (d.module) (isStack(d) ? group.stacks : group.modules).add(d.module);
-    if (isFailedDeployment(d)) group.failing += 1;
+  const groups = new Map<string, GroupAccumulator>();
+  for (const key of configured) groupFor(groups, key);
+  for (const deployment of deployments) {
+    addGroupDeployment(groups, deployment, groupOf, isStack);
   }
 
   return Array.from(groups.entries())
@@ -129,6 +140,90 @@ export type GroupSummary = {
   breakdownRows: BreakdownRow[];
 };
 
+type EntryAccumulator = EntryRow & {
+  accountIds: Set<string>;
+  regionIds: Set<string>;
+  versionIds: Set<string>;
+};
+
+type BreakdownAccumulator = BreakdownRow & { entryKeys: Set<string> };
+
+type GroupSummaryAccumulator = {
+  entries: Map<string, EntryAccumulator>;
+  breakdown: Map<string, BreakdownAccumulator>;
+  statuses: Map<string, number>;
+  accounts: Set<string>;
+  regions: Set<string>;
+  failing: number;
+  drifted: number;
+};
+
+const breakdownFor = (rows: Map<string, BreakdownAccumulator>, key: string) => {
+  let row = rows.get(key);
+  if (!row) {
+    row = { key, count: 0, entries: 0, failing: 0, lastActivity: 0, entryKeys: new Set() };
+    rows.set(key, row);
+  }
+  return row;
+};
+
+const addGroupTotals = (
+  summary: GroupSummaryAccumulator,
+  deployment: Deployment,
+  failed: boolean,
+) => {
+  if (failed) summary.failing += 1;
+  if (deployment.has_drifted === true) summary.drifted += 1;
+  if (deployment.project_id) summary.accounts.add(deployment.project_id);
+  if (deployment.region) summary.regions.add(deployment.region);
+
+  const status = deployment.status || 'unknown';
+  summary.statuses.set(status, (summary.statuses.get(status) ?? 0) + 1);
+};
+
+const addEntryDeployment = (
+  entries: Map<string, EntryAccumulator>,
+  deployment: Deployment,
+  kind: 'module' | 'stack',
+  key: string,
+  failed: boolean,
+) => {
+  if (!deployment.module) return;
+
+  const entry = entries.get(key) ?? {
+    name: deployment.module,
+    kind,
+    count: 0,
+    accounts: 0,
+    regions: 0,
+    versions: 0,
+    failing: 0,
+    accountIds: new Set<string>(),
+    regionIds: new Set<string>(),
+    versionIds: new Set<string>(),
+  };
+  entry.count += 1;
+  if (deployment.project_id) entry.accountIds.add(deployment.project_id);
+  if (deployment.region) entry.regionIds.add(deployment.region);
+  if (deployment.module_version) entry.versionIds.add(deployment.module_version);
+  if (failed) entry.failing += 1;
+  entries.set(key, entry);
+};
+
+const addBreakdownDeployment = (
+  rows: Map<string, BreakdownAccumulator>,
+  deployment: Deployment,
+  breakdownOf: GroupOf,
+  entryKey: string,
+  failed: boolean,
+) => {
+  const row = breakdownFor(rows, breakdownOf(deployment) ?? 'unknown');
+  row.count += 1;
+  if (deployment.module) row.entryKeys.add(entryKey);
+  if (failed) row.failing += 1;
+  row.lastActivity = Math.max(row.lastActivity, deployment.epoch ?? 0);
+};
+
 /**
  * One group's deployments, split by `breakdownOf`. Values in `configuredBreakdown` get a
  * row even when nothing runs in them.
@@ -139,69 +234,30 @@ export const summarizeGroup = (
   breakdownOf: GroupOf,
   configuredBreakdown: string[] = [],
 ): GroupSummary => {
-  const entries = new Map<
-    string,
-    EntryRow & { accountIds: Set<string>; regionIds: Set<string>; versionIds: Set<string> }
-  >();
-  const breakdown = new Map<string, BreakdownRow & { entryKeys: Set<string> }>();
-  const statuses = new Map<string, number>();
-  const accounts = new Set<string>();
-  const regions = new Set<string>();
-  let failing = 0;
-  let drifted = 0;
-
-  const breakdownFor = (key: string) => {
-    let row = breakdown.get(key);
-    if (!row) {
-      row = { key, count: 0, entries: 0, failing: 0, lastActivity: 0, entryKeys: new Set() };
-      breakdown.set(key, row);
-    }
-    return row;
+  const summary: GroupSummaryAccumulator = {
+    entries: new Map(),
+    breakdown: new Map(),
+    statuses: new Map(),
+    accounts: new Set(),
+    regions: new Set(),
+    failing: 0,
+    drifted: 0,
   };
-  for (const key of configuredBreakdown) breakdownFor(key);
 
-  for (const d of deployments) {
-    const failed = isFailedDeployment(d);
-    if (failed) failing += 1;
-    if (d.has_drifted === true) drifted += 1;
-    if (d.project_id) accounts.add(d.project_id);
-    if (d.region) regions.add(d.region);
+  for (const key of configuredBreakdown) breakdownFor(summary.breakdown, key);
 
-    const status = d.status || 'unknown';
-    statuses.set(status, (statuses.get(status) ?? 0) + 1);
+  for (const deployment of deployments) {
+    const failed = isFailedDeployment(deployment);
+    addGroupTotals(summary, deployment, failed);
 
     // A module and a stack can share a name, so the kind is part of the key.
-    const kind = isStack(d) ? 'stack' : 'module';
-    const entryKey = `${kind}:${d.module}`;
-    if (d.module) {
-      const entry = entries.get(entryKey) ?? {
-        name: d.module,
-        kind,
-        count: 0,
-        accounts: 0,
-        regions: 0,
-        versions: 0,
-        failing: 0,
-        accountIds: new Set<string>(),
-        regionIds: new Set<string>(),
-        versionIds: new Set<string>(),
-      };
-      entry.count += 1;
-      if (d.project_id) entry.accountIds.add(d.project_id);
-      if (d.region) entry.regionIds.add(d.region);
-      if (d.module_version) entry.versionIds.add(d.module_version);
-      if (failed) entry.failing += 1;
-      entries.set(entryKey, entry);
-    }
-
-    const row = breakdownFor(breakdownOf(d) ?? 'unknown');
-    row.count += 1;
-    if (d.module) row.entryKeys.add(entryKey);
-    if (failed) row.failing += 1;
-    row.lastActivity = Math.max(row.lastActivity, d.epoch ?? 0);
+    const kind = isStack(deployment) ? 'stack' : 'module';
+    const entryKey = `${kind}:${deployment.module}`;
+    addEntryDeployment(summary.entries, deployment, kind, entryKey, failed);
+    addBreakdownDeployment(summary.breakdown, deployment, breakdownOf, entryKey, failed);
   }
 
-  const entryRows = Array.from(entries.values())
+  const entryRows = Array.from(summary.entries.values())
     .map(({ accountIds, regionIds, versionIds, ...row }) => ({
       ...row,
       accounts: accountIds.size,
@@ -212,17 +268,17 @@ export const summarizeGroup = (
 
   return {
     total: deployments.length,
-    accounts: accounts.size,
-    regions: regions.size,
+    accounts: summary.accounts.size,
+    regions: summary.regions.size,
     modules: entryRows.filter((row) => row.kind === 'module').length,
     stacks: entryRows.filter((row) => row.kind === 'stack').length,
-    failing,
-    drifted,
-    statuses: Array.from(statuses.entries())
+    failing: summary.failing,
+    drifted: summary.drifted,
+    statuses: Array.from(summary.statuses.entries())
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
     entryRows,
-    breakdownRows: Array.from(breakdown.values())
+    breakdownRows: Array.from(summary.breakdown.values())
       .map(({ entryKeys, ...row }) => ({ ...row, entries: entryKeys.size }))
       .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
   };
