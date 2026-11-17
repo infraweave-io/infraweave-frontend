@@ -38,6 +38,7 @@ import { Env } from '../utils/env';
 import { StandaloneAppBar } from './components/ComponentAdapter';
 import { PageTransition } from './components/PageTransition';
 import { AiAssistantOverlay } from '../shared/components/AiAssistantOverlay';
+import { useRecordVisits } from '../hooks/useRecordVisits';
 
 // Lazy-loaded route components for code splitting
 const LoginPage = React.lazy(() =>
@@ -195,6 +196,11 @@ const ScrollToTop: React.FC = () => {
   return null;
 };
 
+const RecordVisits: React.FC = () => {
+  useRecordVisits();
+  return null;
+};
+
 const GraphWrapper = () => {
   const config = useConfig();
   // `file` is an API path, never a full URL, so a link can't point the fetch at another host.
@@ -334,6 +340,7 @@ export const StandaloneApp: React.FC<StandaloneAppProps> = ({
                           <SelectedProvidersProvider>
                             <SelectedProjectsProvider>
                               <ScrollToTop />
+                              <RecordVisits />
                               <PageTransition>
                                 <Routes>
                                   {/* Main tabs handled by RootPage */}
