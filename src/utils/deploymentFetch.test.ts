@@ -1,5 +1,6 @@
 import {
   batchProjectIds,
+  fetchDeploymentHistory,
   fetchDeployments,
   fetchFleetDeployments,
   fetchModulesGlobally,
@@ -652,5 +653,71 @@ describe('fetchFleetDeployments', () => {
     expect(result.incomplete).toBe('request-failed');
     expect(result.deployments).toHaveLength(1);
     warn.mockRestore();
+  });
+});
+
+describe('fetchDeploymentHistory', () => {
+  const sources = [
+    { projectId: '111111111111', region: 'us-west-2' },
+    { projectId: '222222222222', region: 'eu-central-1' },
+  ];
+
+  it('asks once per account and region, with the type after the region', async () => {
+    const config = makeConfig();
+
+    await fetchDeploymentHistory(config, 'plans', sources);
+
+    expect(config.paths.sort()).toEqual([
+      'api/proxy/api/infraweave/api/v1/deployments/history/111111111111/us-west-2?type=plans',
+      'api/proxy/api/infraweave/api/v1/deployments/history/222222222222/eu-central-1?type=plans',
+    ]);
+  });
+
+  it('follows x-next-token and accepts the Items envelope', async () => {
+    const config = makeConfig(
+      (path) => ({ Items: [{ deployment_id: path.includes('next_token') ? 'second' : 'first' }] }),
+      (path) => (path.includes('next_token') ? null : 'page-2'),
+    );
+
+    const { records, incomplete } = await fetchDeploymentHistory(config, 'deleted', [sources[0]]);
+
+    expect(config.paths[1]).toContain('?type=deleted&next_token=page-2');
+    expect(records.map((d) => d.deployment_id)).toEqual(['first', 'second']);
+    expect(incomplete).toBeUndefined();
+  });
+
+  it('keeps the accounts that answered and reports the rest as a short list', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = makeConfig(() => [{ deployment_id: 'survivor' }]);
+    const guarded = {
+      ...config,
+      fetch: (input: RequestInfo | URL) =>
+        String(input).includes('222222222222')
+          ? Promise.reject(new Error('503'))
+          : config.fetch(input),
+    };
+
+    const { records, incomplete } = await fetchDeploymentHistory(guarded, 'plans', sources);
+
+    expect(records.map((d) => d.deployment_id)).toEqual(['survivor']);
+    expect(incomplete).toBe('request-failed');
+    warn.mockRestore();
+  });
+
+  it('throws when no account answers', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = { ...makeConfig(), fetch: () => Promise.reject(new Error('offline')) };
+
+    await expect(fetchDeploymentHistory(config, 'plans', sources)).rejects.toThrow(
+      'The plan history could not be loaded',
+    );
+    warn.mockRestore();
+  });
+
+  it('makes no request when there is nothing to ask for', async () => {
+    const config = makeConfig();
+
+    expect(await fetchDeploymentHistory(config, 'plans', [])).toEqual({ records: [] });
+    expect(config.paths).toEqual([]);
   });
 });

@@ -92,15 +92,7 @@ export const RootPage = () => {
   const renderTabContent = () => {
     switch (selectedTab) {
       case 'overview':
-        return (
-          <>
-            <PageHeading
-              title="Overview"
-              description="Infrastructure managed through InfraWeave across every connected cloud account."
-            />
-            <Overview />
-          </>
-        );
+        return <Overview />;
       case 'deployments':
         return (
           <TabLayout

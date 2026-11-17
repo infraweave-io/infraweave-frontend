@@ -7,6 +7,7 @@ import ModuleIcon from '@mui/icons-material/Extension';
 import PolicyIcon from '@mui/icons-material/Policy';
 import ProviderIcon from '@mui/icons-material/Cloud';
 import { Link } from '../../../standalone/components/ComponentAdapter';
+import { ago } from '../../../utils/format';
 import { getVisits, subscribeToVisits, VisitKind } from '../../../utils/visitHistory';
 
 const MAX_ROWS = 8;
@@ -19,15 +20,6 @@ const KIND_ICON: Record<VisitKind, React.ElementType> = {
   stack: StackIcon,
   policy: PolicyIcon,
   provider: ProviderIcon,
-};
-
-const ago = (epoch: number): string => {
-  const minutes = Math.max(0, Math.round((Date.now() - epoch) / 60000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
 };
 
 /** The pages this user opened most recently, newest first. */

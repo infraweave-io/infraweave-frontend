@@ -25,7 +25,9 @@ test.describe('Authentication - authenticated state', () => {
   test('shows main content when auth is disabled (default test env)', async ({ page }) => {
     await page.goto('/infraweave/overview');
     // Auth is disabled in the test webserver env → overview page must appear
-    await expect(page.getByText('Announcements', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
 

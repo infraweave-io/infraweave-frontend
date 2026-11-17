@@ -7,20 +7,27 @@ test.describe('Overview page', () => {
     await setupApiMocks(page);
   });
 
-  test('renders announcements card', async ({ page }) => {
+  test('renders the default widgets', async ({ page }) => {
     await page.goto('/infraweave/overview');
-    await expect(page.getByText('Announcements', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Failed deployments' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Latest releases' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'About InfraWeave' })).toBeVisible();
   });
 
-  test('renders view all announcements link', async ({ page }) => {
+  test('removes and adds back a widget, keeping the layout on reload', async ({ page }) => {
     await page.goto('/infraweave/overview');
-    await expect(page.getByRole('link', { name: /view all announcements/i })).toBeVisible();
-  });
+    await page.getByRole('button', { name: 'Customize' }).click();
+    await page.getByRole('button', { name: 'Remove Recently visited' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByRole('region', { name: 'Recently visited' })).toHaveCount(0);
 
-  test('shows cloud filter panel on overview', async ({ page }) => {
-    await page.goto('/infraweave/overview');
-    // Overview tab renders the "About InfraWeave" InfoCard (previously titled
-    // "About the tool", inside a full-width card that was mostly empty space)
-    await expect(page.getByText('About InfraWeave').first()).toBeVisible({ timeout: 10000 });
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Failed deployments' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Recently visited' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Customize' }).click();
+    await page.getByRole('button', { name: 'Add widget' }).click();
+    await page.getByRole('menuitem', { name: 'Recently visited' }).click();
+    await expect(page.getByRole('region', { name: 'Recently visited' })).toBeVisible();
   });
 });

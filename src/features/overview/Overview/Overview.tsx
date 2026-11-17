@@ -1,35 +1,42 @@
 import React from 'react';
-import { Link, InfoCard } from '../../../standalone/components/ComponentAdapter';
-import { Box, Grid, Typography } from '@mui/material';
+import { Box, Button } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import { PageHeading } from '../../../shared/components/PageHeading';
+import { WidgetContainer } from '../../widgets/WidgetContainer';
+import { OVERVIEW_WIDGETS } from './overviewWidgets';
+import { useOverviewLayout } from './useOverviewLayout';
 
-/**
- * Landing content for the Overview tab.
- *
- * Cards are sized to their content and laid out on a responsive grid; the
- * previous full-width card stretched a single link across the viewport.
- */
-export const Overview = () => (
-  <Grid container spacing={2.5}>
-    <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-      <InfoCard
-        title="Announcements"
-        subheader="Latest news and updates"
-        deepLink={{ link: '/infraweave/announcements', title: 'View all announcements' }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          No announcements right now.
-        </Typography>
-      </InfoCard>
-    </Grid>
-    <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-      <InfoCard title="About InfraWeave" subheader="Documentation and guides">
-        <Typography variant="body2" color="text.secondary">
-          InfraWeave manages modules, stacks, and deployments across your cloud accounts.
-        </Typography>
-        <Box sx={{ mt: 1.5 }}>
-          <Link href="https://preview.infraweave.io/">Read the documentation</Link>
-        </Box>
-      </InfoCard>
-    </Grid>
-  </Grid>
-);
+/** Landing content for the Overview tab: widgets the user can rearrange, add and remove. */
+export const Overview = () => {
+  const [editing, setEditing] = React.useState(false);
+  const { layout, setLayout, resetLayout } = useOverviewLayout();
+
+  return (
+    <>
+      <PageHeading
+        title="Overview"
+        description="Infrastructure managed through InfraWeave across every connected cloud account."
+        actions={
+          editing ? (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={resetLayout}>Reset to default</Button>
+              <Button variant="contained" onClick={() => setEditing(false)}>
+                Done
+              </Button>
+            </Box>
+          ) : (
+            <Button startIcon={<EditIcon />} onClick={() => setEditing(true)}>
+              Customize
+            </Button>
+          )
+        }
+      />
+      <WidgetContainer
+        widgets={OVERVIEW_WIDGETS}
+        layout={layout}
+        onLayoutChange={setLayout}
+        editing={editing}
+      />
+    </>
+  );
+};

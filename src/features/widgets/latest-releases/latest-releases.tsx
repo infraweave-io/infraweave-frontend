@@ -14,10 +14,16 @@ import {
 import { Link, ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
 import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { SearchField } from '../../../shared/components/SearchField';
-import { usePaginatedItems } from '../../../hooks/usePaginatedItems';
+import { useConfig } from '../../../hooks/useConfig';
+import { useCachedQuery } from '../../../utils/queryCache';
+import { fetchAllRegistryPages } from '../../adoption-health/AdoptionHealthPage/useFleetDeployments';
 import { Module } from '../../../types/Module';
 import { shortenVersion } from '../../../utils/version';
 import { bestFuzzyScore } from '../../../utils/fuzzyMatch';
+import { ago } from '../../../utils/format';
+import { trackRank } from '../../../utils/tracks';
+import { useWidgetSetting } from '../widgetSettings';
+import { useOnWidgetReload } from '../widgetReload';
 
 /** A widget is a preview; every version lives on the Modules and Stacks tabs. */
 const MAX_ROWS = 8;
@@ -36,14 +42,6 @@ const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
   { value: 'stack', label: 'Stacks' },
 ];
 
-/** Most to least stable, as on the module pages. Tracks not listed here sort after them. */
-const TRACK_ORDER = ['stable', 'beta', 'alpha', 'dev'];
-
-const trackRank = (track: string) => {
-  const index = TRACK_ORDER.indexOf(track);
-  return index === -1 ? TRACK_ORDER.length : index;
-};
-
 type Release = {
   kind: Kind;
   name: string;
@@ -54,24 +52,27 @@ type Release = {
   publishedAt: number;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Relative while recent; a date once "N days ago" stops being easy to place. */
-const published = (epoch: number): string => {
-  const minutes = Math.max(0, Math.round((Date.now() - epoch) / 60000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  const days = Math.round((Date.now() - epoch) / DAY_MS);
-  if (days < 30) return `${days} d ago`;
-  return new Date(epoch).toLocaleDateString();
-};
-
 const releaseLink = (release: Release) =>
   `/infraweave/${release.kind}/${release.track}/${encodeURIComponent(
     release.name,
   )}/${encodeURIComponent(release.version)}`;
+
+const NO_ITEMS: Module[] = [];
+
+/** One registry list, through the query cache so a remount within a few minutes draws at once. */
+const useRegistryList = (path: string) => {
+  const config = useConfig();
+  const { data, loading, error, reload } = useCachedQuery(path, () =>
+    fetchAllRegistryPages(config, path),
+  );
+  return {
+    items: data?.items ?? NO_ITEMS,
+    loading,
+    error,
+    truncated: data ? !data.complete : false,
+    reload,
+  };
+};
 
 const toReleases = (items: Module[], kind: Kind): Release[] =>
   items
@@ -93,8 +94,9 @@ const toReleases = (items: Module[], kind: Kind): Release[] =>
  * version of each track, so each row is the newest release of one module on one track.
  */
 export const LatestReleasesList = () => {
-  const modules = usePaginatedItems<Module>(MODULES_PATH, 'modules');
-  const stacks = usePaginatedItems<Module>(STACKS_PATH, 'stacks');
+  const modules = useRegistryList(MODULES_PATH);
+  const stacks = useRegistryList(STACKS_PATH);
+  useOnWidgetReload(() => Promise.all([modules.reload(), stacks.reload()]));
 
   const releases = React.useMemo(() => {
     // Keep one row per module and track, the newest, in case a list carries older versions.
@@ -113,8 +115,9 @@ export const LatestReleasesList = () => {
   }, [modules.items, stacks.items]);
 
   const [query, setQuery] = React.useState('');
-  const [kind, setKind] = React.useState<KindFilter>('all');
-  const [track, setTrack] = React.useState('all');
+  // The filters are kept for next time; the search is not.
+  const [storedKind, setKind] = useWidgetSetting<KindFilter>('kind', 'all');
+  const [storedTrack, setTrack] = useWidgetSetting<string>('track', 'all');
 
   // Only tracks something was published on, so no option leads to an empty list.
   const tracks = React.useMemo(
@@ -124,6 +127,10 @@ export const LatestReleasesList = () => {
       ),
     [releases],
   );
+
+  // A kept filter can be stale: a track nothing is published on any more, or an edited value.
+  const kind = KIND_OPTIONS.some((option) => option.value === storedKind) ? storedKind : 'all';
+  const track = tracks.includes(storedTrack) ? storedTrack : 'all';
 
   const searching = query.trim() !== '';
   const filtering = searching || kind !== 'all' || track !== 'all';
@@ -277,7 +284,7 @@ export const LatestReleasesList = () => {
                       title={new Date(release.publishedAt).toLocaleString()}
                       sx={{ flexShrink: 0, minWidth: 56, textAlign: 'right' }}
                     >
-                      {published(release.publishedAt)}
+                      {ago(release.publishedAt)}
                     </Typography>
                   )}
                 </Box>
@@ -286,11 +293,6 @@ export const LatestReleasesList = () => {
           )}
         </>
       )}
-
-      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1.5 }}>
-        Browse all <Link to="/infraweave/modules">modules</Link> and{' '}
-        <Link to="/infraweave/stacks">stacks</Link>
-      </Typography>
 
       {truncated.length > 0 && (
         <ListIncomplete label={truncated.join(' and ')} reason="stopped before the end" />
