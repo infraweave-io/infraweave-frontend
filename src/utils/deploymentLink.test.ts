@@ -22,4 +22,10 @@ describe('deploymentLink', () => {
       '/infraweave/deployment/123456789012/eu-west-1/playground%2Fdev/s3bucket%2Fmy-bucket/overview',
     );
   });
+
+  it('encodes the account and region too, so no segment can be added or changed', () => {
+    expect(deploymentLink({ ...deployment, project_id: '../admin', region: 'a/b' })).toBe(
+      '/infraweave/deployment/..%2Fadmin/a%2Fb/playground%2Fdev/s3bucket%2Fmy-bucket/overview',
+    );
+  });
 });
