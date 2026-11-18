@@ -328,7 +328,7 @@ export const deployments_123808927997_eu_central_1 = [
     job_id: 'e77345c6095d434ba466e7b1eb0f0004',
     module: 'bucketcollection',
     module_PK_base: 'MODULE#123808927997::eu-central-1#bucketcollection',
-    module_track: 'stable',
+    module_track: 'dev',
     module_type: 'stack',
     module_version: '0.0.15-dev+main.9',
     next_drift_check_epoch: (get_epoch() + 3600 * 0.5) * 1000,

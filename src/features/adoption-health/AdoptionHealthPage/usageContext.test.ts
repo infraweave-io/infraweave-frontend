@@ -2,7 +2,7 @@ import React from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Deployment } from '../../../types/Deployment';
-import { filterSummary, matchesFilters, usageHref, useUsageContext } from './usageContext';
+import { matchesFilters, usageHref, useUsageContext } from './usageContext';
 
 describe('usageHref', () => {
   it('links to a usage page with its context in the query', () => {
@@ -35,6 +35,31 @@ describe('usageHref', () => {
       '/infraweave/adoption-health/module-usage?module=a+b%26c',
     );
   });
+  it('carries only non-default module usage modes through drill-down links', () => {
+    expect(
+      usageHref('account-usage', {
+        module: 's3bucket',
+        kind: 'module',
+        account: '1',
+        moduleUsageMode: 'in-stacks',
+      }),
+    ).toBe(
+      '/infraweave/adoption-health/account-usage?module=s3bucket&kind=module&account=1&moduleUsageMode=in-stacks',
+    );
+    expect(
+      usageHref('region-usage', {
+        module: 's3bucket',
+        kind: 'module',
+        region: 'us-east-1',
+        moduleUsageMode: 'both',
+      }),
+    ).toBe(
+      '/infraweave/adoption-health/region-usage?module=s3bucket&kind=module&region=us-east-1&moduleUsageMode=both',
+    );
+    expect(usageHref('region-usage', { module: 's3bucket', moduleUsageMode: 'standalone' })).toBe(
+      '/infraweave/adoption-health/region-usage?module=s3bucket',
+    );
+  });
 });
 
 describe('matchesFilters', () => {
@@ -65,25 +90,6 @@ describe('matchesFilters', () => {
   });
 });
 
-describe('filterSummary', () => {
-  it('names the filters in one line, with display names', () => {
-    expect(
-      filterSummary({ region: 'eu-west-1', account: '111111111111' }, { '111111111111': 'Dev' }),
-    ).toBe('Showing only Region: eu-west-1 (Ireland), Account: Dev');
-  });
-
-  it('names a stack filter as a stack', () => {
-    expect(filterSummary({ module: 'webapp', kind: 'stack' }, {})).toBe(
-      'Showing only Stack: webapp',
-    );
-    expect(filterSummary({ module: 'vpc', kind: 'module' }, {})).toBe('Showing only Module: vpc');
-  });
-
-  it('is undefined without filters', () => {
-    expect(filterSummary({}, {})).toBeUndefined();
-  });
-});
-
 describe('useUsageContext', () => {
   const renderAt = (url: string) =>
     renderHook(() => useUsageContext(), {
@@ -91,21 +97,52 @@ describe('useUsageContext', () => {
         React.createElement(MemoryRouter, { initialEntries: [url] }, children),
     });
 
-  it('reads the kind only next to a module', () => {
+  it('defaults a missing or invalid mode to standalone and reads mode separately from kind', () => {
     expect(renderAt('/?module=net&kind=stack').result.current.context).toEqual({
       module: 'net',
       kind: 'stack',
+      moduleUsageMode: 'standalone',
     });
-    expect(renderAt('/?kind=stack&region=eu-west-1').result.current.context).toEqual({
+    expect(
+      renderAt('/?module=net&kind=module&moduleUsageMode=in-stacks').result.current.context,
+    ).toEqual({
+      module: 'net',
+      kind: 'module',
+      moduleUsageMode: 'in-stacks',
+    });
+    expect(
+      renderAt('/?kind=stack&region=eu-west-1&moduleUsageMode=unknown').result.current.context,
+    ).toEqual({
       region: 'eu-west-1',
+      moduleUsageMode: 'standalone',
     });
   });
 
-  it('drops the kind when the module it qualified changes', () => {
-    const { result } = renderAt('/?module=net&kind=stack');
+  it('drops kind when module changes without changing its separate usage mode', () => {
+    const { result } = renderAt('/?module=net&kind=module&moduleUsageMode=both');
 
     act(() => result.current.set('module', 'vpc'));
 
-    expect(result.current.context).toEqual({ module: 'vpc' });
+    expect(result.current.context).toEqual({ module: 'vpc', moduleUsageMode: 'both' });
+  });
+
+  it('changes the usage mode in place and removes the query for standalone', () => {
+    const { result } = renderAt('/?module=s3bucket&kind=module&account=1');
+
+    act(() => result.current.setModuleUsageMode('in-stacks'));
+    expect(result.current.context).toEqual({
+      module: 's3bucket',
+      kind: 'module',
+      account: '1',
+      moduleUsageMode: 'in-stacks',
+    });
+
+    act(() => result.current.setModuleUsageMode('standalone'));
+    expect(result.current.context).toEqual({
+      module: 's3bucket',
+      kind: 'module',
+      account: '1',
+      moduleUsageMode: 'standalone',
+    });
   });
 });

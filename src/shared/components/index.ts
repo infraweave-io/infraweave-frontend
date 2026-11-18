@@ -16,3 +16,4 @@ export * from './DeployResourceDialog';
 export * from './DeploySelectedContext';
 export * from './DeployVariableContext';
 export * from './DeployVariableSettings';
+export * from './SegmentedToggle';

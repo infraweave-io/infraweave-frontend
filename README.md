@@ -8,6 +8,7 @@ Standalone frontend application for the InfraWeave platform. Runs as a single-pa
 - [Run Modes](#run-modes)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
+- [Module Usage](#module-usage)
 - [Testing](#testing)
 - [Production Build](#production-build)
 - [Docker](#docker)
@@ -90,6 +91,14 @@ src/
 ```
 
 Entry point: [src/standalone/index.tsx](src/standalone/index.tsx) — referenced directly from [index.html](index.html).
+
+---
+
+## Module Usage
+
+Open **Adoption & Health → Module Usage** (`/infraweave/adoption-health/module-usage`). The **Source** selector shows standalone module deployments, module uses within deployed stacks, or both. Within-stack status, failures, and drift reflect the parent stack deployment; **About stack metrics** explains this in the app.
+
+If some deployed stack compositions cannot be loaded, a warning inside the results card marks their counts as potentially incomplete. A compact incomplete-counts cue remains visible in a selected overview. Account and region drill-downs label the active source in their filters and overview headings. Counts are worded as deployments, uses, or deployments and uses to match the source; a stack that contains a module twice counts as two uses.
 
 ---
 

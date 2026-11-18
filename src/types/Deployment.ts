@@ -55,3 +55,13 @@ export type Deployment = {
   deleted?: boolean;
   change_type?: string;
 };
+
+export interface StackModuleUsage extends Deployment {
+  usageSource: 'stack';
+  stackName: string;
+  stackVersion: string;
+  componentIndex: number;
+}
+
+export const isStackModuleUsage = (deployment: Deployment): deployment is StackModuleUsage =>
+  'usageSource' in deployment && deployment.usageSource === 'stack';

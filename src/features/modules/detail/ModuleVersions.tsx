@@ -29,8 +29,12 @@ import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { ZipBrowser } from '../../../shared/components/ZipBrowser';
 import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
+import {
+  isStackModuleUsage,
+  type Deployment,
+  type StackModuleUsage,
+} from '../../../types/Deployment';
 import { ChangesTags } from './VersionDiff';
-import { Deployment } from '../../../types/Deployment';
 import {
   fetchDeployments,
   IncompleteReason,
@@ -46,6 +50,9 @@ const TRACKS = ['stable', 'beta', 'alpha', 'dev'];
 
 /** Shared empty default, so callers that pass no version list keep a stable identity. */
 const NO_VERSIONS: Module[] = [];
+
+/** Shared empty default for optional parent-stack module rows. */
+const NO_STACK_MODULE_DEPLOYMENTS: StackModuleUsage[] = [];
 
 /** A popular module has hundreds of deployments, so all are loaded but one page is rendered. */
 const DEPLOYMENTS_PAGE_SIZE = 50;
@@ -327,6 +334,9 @@ export const DeploymentsDialog = ({
   resourceType = 'module',
   initialProjectIds,
   initialRegions,
+  stackModuleDeployments = NO_STACK_MODULE_DEPLOYMENTS,
+  includeDirectDeployments = true,
+  rowLabel = 'Deployments',
 }: {
   open: boolean;
   onClose: () => void;
@@ -337,8 +347,15 @@ export const DeploymentsDialog = ({
   /** Starting selection when opened from a narrowed view. Omitted, everything is selected. */
   initialProjectIds?: string[];
   initialRegions?: string[];
+  /** Child-module uses expanded from deployed parent stacks. */
+  stackModuleDeployments?: StackModuleUsage[];
+  /** False when only stack uses are wanted, so the module's own deployments are not fetched. */
+  includeDirectDeployments?: boolean;
+  /** Plural label for what the rows are (e.g. "Uses" when only stack uses are listed). */
+  rowLabel?: string;
 }) => {
   const config = useConfig();
+  const rowsLabel = rowLabel.toLowerCase();
   const [projects, setProjects] = useState<any[]>([]);
   const [publishedVersions, setPublishedVersions] = useState<Module[]>([]);
   const [availableRegions, setAvailableRegions] = useState<string[]>([]);
@@ -411,17 +428,22 @@ export const DeploymentsDialog = ({
     return Array.from(byTrackAndVersion.values());
   }, [knownVersions, publishedVersions]);
 
-  // Deployment records do not always carry the track they were deployed from; fill it in from
-  // the published versions so the track filter can reach them.
-  const trackedDeployments = React.useMemo(
-    () =>
-      allDeployments.map((d) => {
-        if (d.module_track || !d.module_version) return d;
-        const match = allVersions.find((v) => v.version === d.module_version);
-        return match?.track ? { ...d, module_track: match.track } : d;
-      }),
-    [allDeployments, allVersions],
-  );
+  // Direct deployments and component records may omit their own track; resolve it from the
+  // selected module's published versions, never from the parent stack's track.
+  const trackedDeployments = React.useMemo(() => {
+    const addPublishedTrack = (d: Deployment) => {
+      if (d.module_track || !d.module_version) return d;
+      const match = allVersions.find((v) => v.version === d.module_version);
+      return match?.track ? { ...d, module_track: match.track } : d;
+    };
+    const directDeployments = allDeployments.map(addPublishedTrack);
+    const selectedStackDeployments = stackModuleDeployments
+      .filter(
+        (d) => selectedProjectIds.includes(d.project_id) && selectedRegions.includes(d.region),
+      )
+      .map(addPublishedTrack);
+    return [...directDeployments, ...selectedStackDeployments];
+  }, [allDeployments, allVersions, stackModuleDeployments, selectedProjectIds, selectedRegions]);
 
   // By value, so a caller passing a fresh array each render does not refetch the projects.
   // Undefined when not given, which is not the same as given and empty.
@@ -478,7 +500,12 @@ export const DeploymentsDialog = ({
 
   // Fetch deployments when filters change
   React.useEffect(() => {
-    if (!open || selectedProjectIds.length === 0 || selectedRegions.length === 0) {
+    if (
+      !open ||
+      !includeDirectDeployments ||
+      selectedProjectIds.length === 0 ||
+      selectedRegions.length === 0
+    ) {
       if (open) {
         setAllDeployments([]);
         setIncomplete(undefined);
@@ -520,7 +547,7 @@ export const DeploymentsDialog = ({
 
     loadDeployments();
     return () => controller.abort();
-  }, [open, selectedProjectIds, selectedRegions, moduleName, config]);
+  }, [open, includeDirectDeployments, selectedProjectIds, selectedRegions, moduleName, config]);
 
   // Filter deployments locally when version selection changes or deployments update.
   const deployments = React.useMemo(() => {
@@ -595,6 +622,7 @@ export const DeploymentsDialog = ({
     { title: 'Account', field: 'account_name' },
     { title: 'Environment', field: 'environment' },
     { title: 'Region', field: 'region' },
+    ...(stackModuleDeployments.length > 0 ? [{ title: 'Parent stack', field: 'stack_name' }] : []),
     { title: 'Version', field: 'module_version' },
     { title: 'Status', field: 'status' },
   ];
@@ -608,6 +636,7 @@ export const DeploymentsDialog = ({
 
       return {
         ...d,
+        ...(isStackModuleUsage(d) ? { stack_name: d.stackName } : {}),
         deployment_id: <Link to={deployment_link}>{d.deployment_id}</Link>,
         account_name: project ? project.name : d.project_id,
         module_version: <VersionCell version={d.module_version} />,
@@ -620,8 +649,11 @@ export const DeploymentsDialog = ({
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
-            Deployments
-            {selectedVersions.length === 1 && ` using version ${selectedVersions[0]}`}
+            {rowLabel}
+            {selectedVersions.length === 1 &&
+              (rowLabel === 'Deployments'
+                ? ` using version ${selectedVersions[0]}`
+                : ` of version ${selectedVersions[0]}`)}
           </Typography>
           <IconButton onClick={onClose} aria-label="close">
             <CloseIcon />
@@ -697,15 +729,15 @@ export const DeploymentsDialog = ({
           </Grid>
         </Grid>
 
-        {(projectsLoading || loading) && allDeployments.length === 0 && <Progress />}
+        {(projectsLoading || loading) && trackedDeployments.length === 0 && <Progress />}
         {error && <ResponseErrorPanel error={error} />}
-        {!error && allDeployments.length > 0 && (
+        {!error && trackedDeployments.length > 0 && (
           <Table
             // "N of M" when filtered, so a small count doesn't read as a load that came up short.
             title={
               deployments.length === trackedDeployments.length
-                ? `Deployments (${deployments.length})`
-                : `Deployments (${deployments.length} of ${trackedDeployments.length})`
+                ? `${rowLabel} (${deployments.length})`
+                : `${rowLabel} (${deployments.length} of ${trackedDeployments.length})`
             }
             options={{
               search: true,
@@ -718,25 +750,29 @@ export const DeploymentsDialog = ({
             data={getDeploymentsData()}
             emptyContent={
               loading
-                ? 'No deployments match the current filters yet.'
-                : 'No deployments match the current filters.'
+                ? `No ${rowsLabel} match the current filters yet.`
+                : `No ${rowsLabel} match the current filters.`
             }
           />
         )}
-        {!error && loading && allDeployments.length > 0 && (
+        {!error && loading && trackedDeployments.length > 0 && (
           <LoadingMore label="Loading more deployments..." />
         )}
         {!error && !loading && incomplete && (
           <ListIncomplete label="deployments" reason={INCOMPLETE_REASON_TEXT[incomplete]} />
         )}
         {/* A short list already says why it may be empty. */}
-        {!error && !projectsLoading && !loading && !incomplete && allDeployments.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-            {selectedProjectIds.length === 0 || selectedRegions.length === 0
-              ? 'Select at least one project and one region to see deployments.'
-              : `No deployments found for this ${resourceType}.`}
-          </Typography>
-        )}
+        {!error &&
+          !projectsLoading &&
+          !loading &&
+          !incomplete &&
+          trackedDeployments.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              {selectedProjectIds.length === 0 || selectedRegions.length === 0
+                ? `Select at least one project and one region to see ${rowsLabel}.`
+                : `No ${rowsLabel} found for this ${resourceType}.`}
+            </Typography>
+          )}
       </DialogContent>
     </Dialog>
   );

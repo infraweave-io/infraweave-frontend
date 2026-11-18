@@ -25,7 +25,7 @@ import {
   statusTone,
   TABLE_MAX_HEIGHT,
 } from './OverviewParts';
-import { UsageLink } from './usageContext';
+import { COUNT_NOUN, type CountNoun, UsageLink } from './usageContext';
 
 type VersionRow = {
   version: string;
@@ -222,6 +222,8 @@ export type ModuleOverviewProps = {
   onVersionClick?: (version: string) => void;
   /** Where an account's name leads, when the page offers that drill-down. */
   accountHref?: (projectId: string) => string;
+  /** What the counts count. */
+  countNoun?: CountNoun;
 };
 
 export const ModuleOverview = ({
@@ -230,12 +232,15 @@ export const ModuleOverview = ({
   projectNames = {},
   onVersionClick,
   accountHref,
+  countNoun = COUNT_NOUN.standalone,
 }: ModuleOverviewProps) => {
   const summary = React.useMemo(() => summarize(deployments), [deployments]);
 
   if (summary.total === 0) {
     return (
-      <Typography color="text.secondary">No active deployments found for this {kind}.</Typography>
+      <Typography color="text.secondary">
+        No active {countNoun.plural} found for this {kind}.
+      </Typography>
     );
   }
 
@@ -243,7 +248,7 @@ export const ModuleOverview = ({
     <Box>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-          <Metric label="Deployments" value={summary.total} />
+          <Metric label={countNoun.label} value={summary.total} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
           <Metric label="Accounts" value={summary.accounts} />
@@ -263,7 +268,7 @@ export const ModuleOverview = ({
             label="Failing"
             value={summary.failing}
             tone={countTone(summary.failing, 'error')}
-            hint="Deployments whose last run failed or recorded an error."
+            hint={`${countNoun.label} whose last run failed or recorded an error.`}
           />
         </Grid>
       </Grid>
@@ -274,14 +279,16 @@ export const ModuleOverview = ({
             key={status}
             tone={statusTone(status)}
             label={`${status}: ${count}`}
-            title={`${count} deployment(s) with status ${status}`}
+            title={`${count} ${
+              count === 1 ? countNoun.singular : countNoun.plural
+            } with status ${status}`}
           />
         ))}
         {summary.drifted > 0 && (
           <StatusChip
             tone="warning"
             label={`drifted: ${summary.drifted}`}
-            title="Deployments whose real infrastructure no longer matches their configuration"
+            title={`${countNoun.label} whose real infrastructure no longer matches their configuration`}
           />
         )}
       </Box>
@@ -297,7 +304,7 @@ export const ModuleOverview = ({
                 <TableRow>
                   <TableCell>Version</TableCell>
                   <TableCell>Share</TableCell>
-                  <TableCell align="right">Deployments</TableCell>
+                  <TableCell align="right">{countNoun.label}</TableCell>
                   <TableCell align="right">Failing</TableCell>
                   <TableCell align="right">Accounts</TableCell>
                   <TableCell align="right">Regions</TableCell>
@@ -360,7 +367,7 @@ export const ModuleOverview = ({
               <TableHead>
                 <TableRow>
                   <TableCell>Account</TableCell>
-                  <TableCell align="right">Deployments</TableCell>
+                  <TableCell align="right">{countNoun.label}</TableCell>
                   <TableCell align="right">Failing</TableCell>
                   <TableCell align="right">Versions</TableCell>
                   <TableCell align="right">Last activity</TableCell>
