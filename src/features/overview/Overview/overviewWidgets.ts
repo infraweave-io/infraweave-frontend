@@ -13,7 +13,7 @@ import {
 } from '../../widgets/deployment-activity/deployment-activity';
 import { usageHref } from '../../adoption-health/AdoptionHealthPage/usageContext';
 
-export const OVERVIEW_WIDGETS: WidgetDefinition[] = [
+const ALL_OVERVIEW_WIDGETS: WidgetDefinition[] = [
   {
     id: 'failed-deployments',
     title: 'Failed deployments',
@@ -68,6 +68,16 @@ export const OVERVIEW_WIDGETS: WidgetDefinition[] = [
   },
   { id: 'about-infraweave', title: 'About InfraWeave', Component: AboutInfraWeave },
 ];
+
+/**
+ * Turned off for now: they can't be added with Customize, and saved layouts that hold them
+ * drop them on load. Remove an id here to bring its widget back.
+ */
+const DISABLED_WIDGETS = ['latest-applies', 'latest-plans', 'latest-destroys'];
+
+export const OVERVIEW_WIDGETS = ALL_OVERVIEW_WIDGETS.filter(
+  (widget) => !DISABLED_WIDGETS.includes(widget.id),
+);
 
 /**
  * Left out of the default layout: these ask every account and region for its full history,
