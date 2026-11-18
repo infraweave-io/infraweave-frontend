@@ -4,7 +4,7 @@
  * user browses, so the recording cannot live in the widget.
  */
 
-import { currentOwner } from './fleetCache';
+import { currentOwner, readOwned, writeOwned } from './ownedStorage';
 
 // A localStorage key name, not a credential; gitleaks' generic-api-key rule misreads it.
 const STORAGE_KEY = 'infraweave.recentVisits.v1'; // gitleaks:allow
@@ -12,7 +12,9 @@ const STORAGE_KEY = 'infraweave.recentVisits.v1'; // gitleaks:allow
 /** Enough for any widget size; older visits fall off the end. */
 const MAX_VISITS = 50;
 
-export type VisitKind = 'tab' | 'deployment' | 'module' | 'stack' | 'policy' | 'provider';
+const VISIT_KINDS = ['tab', 'deployment', 'module', 'stack', 'policy', 'provider'] as const;
+
+export type VisitKind = (typeof VISIT_KINDS)[number];
 
 export type Visit = {
   /** Identifies the page, so a revisit moves it to the top instead of adding a duplicate. */
@@ -25,9 +27,6 @@ export type Visit = {
   /** Epoch ms of the latest visit. */
   at: number;
 };
-
-/** Kept with its owner, so a list is never shown to the next user in this browser. */
-type StoredVisits = { owner: string; visits: Visit[] };
 
 /** The Overview itself is left out: it is where the widget is shown. */
 const TAB_LABELS: Record<string, string> = {
@@ -49,7 +48,7 @@ const safeDecode = (segment: string): string => {
 };
 
 /** Null for routes not worth listing: the Overview, login callbacks, unknown paths. */
-export const describeRoute = (pathname: string): Omit<Visit, 'at'> | null => {
+const describeRoute = (pathname: string): Omit<Visit, 'at'> | null => {
   const [root, section, ...rest] = pathname.split('/').filter(Boolean).map(safeDecode);
   if (root !== 'infraweave' || !section) return null;
 
@@ -106,19 +105,30 @@ const EMPTY: Visit[] = [];
 let cache: { owner: string | null; visits: Visit[] } | null = null;
 const listeners = new Set<() => void>();
 
-const readStored = (owner: string | null): Visit[] => {
-  if (!owner) return EMPTY;
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as StoredVisits | null;
-    return parsed && parsed.owner === owner && Array.isArray(parsed.visits) ? parsed.visits : EMPTY;
-  } catch {
-    return EMPTY;
-  }
+const isText = (value: unknown): value is string => typeof value === 'string';
+
+/** Storage can be edited or left by an older version, so every entry is checked before use. */
+const isVisit = (entry: unknown): entry is Visit => {
+  const { key, path, kind, label, detail, at } = (entry ?? {}) as Partial<Visit>;
+  return (
+    isText(key) &&
+    isText(path) &&
+    path.startsWith('/infraweave/') &&
+    VISIT_KINDS.includes(kind as VisitKind) &&
+    isText(label) &&
+    (detail === undefined || isText(detail)) &&
+    typeof at === 'number'
+  );
+};
+
+const readStored = (): Visit[] => {
+  const stored = readOwned(STORAGE_KEY);
+  return Array.isArray(stored) ? stored.filter(isVisit) : EMPTY;
 };
 
 export const getVisits = (): Visit[] => {
   const owner = currentOwner();
-  if (!cache || cache.owner !== owner) cache = { owner, visits: readStored(owner) };
+  if (!cache || cache.owner !== owner) cache = { owner, visits: owner ? readStored() : EMPTY };
   return cache.visits;
 };
 
@@ -148,10 +158,6 @@ export const recordVisit = (pathname: string, now = Date.now()): void => {
     ...getVisits().filter((visit) => visit.key !== page.key),
   ].slice(0, MAX_VISITS);
   cache = { owner, visits };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ owner, visits } satisfies StoredVisits));
-  } catch {
-    // Storage full or blocked: the list still updates for this session.
-  }
+  writeOwned(STORAGE_KEY, visits);
   listeners.forEach((listener) => listener());
 };

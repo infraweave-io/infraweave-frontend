@@ -5,14 +5,11 @@
 
 import { Deployment } from '../types/Deployment';
 import { fetchFleetDeployments, FetchProgress, IncompleteReason } from './deploymentFetch';
-import { decodeJwtPayload } from './oauth';
+import { currentOwner } from './ownedStorage';
 
 const CACHE_KEY = 'infraweave.fleet.v2';
 /** Stored before the fleet recorded its owner; removed so it is never read. */
 const LEGACY_CACHE_KEYS = ['infraweave.fleet.v1'];
-
-/** Stands in for a real token when auth is disabled; see StandaloneApp. */
-const AUTH_DISABLED_TOKEN = 'disabled_auth_dummy_token';
 
 /** Past this, views still draw the stored fleet but refresh it in the background. */
 export const FLEET_FRESH_FOR_MS = 15 * 60 * 1000;
@@ -53,23 +50,6 @@ type StoredFleet = {
 };
 
 const EMPTY: FleetSnapshot = { deployments: [], fetchedAt: 0, loading: false };
-
-/**
- * `iss|sub`, since a subject is only unique within its issuer. Null (memory only) when either
- * is missing; a username or email is not unique across providers, so it is no fallback.
- */
-export const currentOwner = (): string | null => {
-  try {
-    const token = localStorage.getItem('auth_token');
-    if (!token) return null;
-    if (token === AUTH_DISABLED_TOKEN) return 'auth-disabled';
-    const { iss, sub } = decodeJwtPayload(token);
-    if (typeof iss !== 'string' || !iss || typeof sub !== 'string' || !sub) return null;
-    return `${iss}|${sub}`;
-  } catch {
-    return null;
-  }
-};
 
 const readStored = (): FleetSnapshot => {
   try {

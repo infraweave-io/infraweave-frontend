@@ -76,6 +76,8 @@ const rowNames = () =>
 describe('LatestAppliesList', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Auth disabled stands for one known user, so widget settings are kept.
+    localStorage.setItem('auth_token', 'disabled_auth_dummy_token');
     inputs.fleet = {
       deployments: [
         deployment({ deployment_id: 'old-vpc', epoch: Date.now() - 3 * 60 * 60 * 1000 }),
@@ -127,7 +129,10 @@ describe('LatestAppliesList', () => {
   it('offers a way out when nothing matches', async () => {
     localStorage.setItem(
       'infraweave.widgetSettings.v1',
-      JSON.stringify({ latest: { modules: ['vpc'], status: 'in-progress' } }),
+      JSON.stringify({
+        owner: 'auth-disabled',
+        value: { latest: { modules: ['vpc'], status: 'in-progress' } },
+      }),
     );
     renderWidget(<LatestAppliesList />);
 
@@ -140,6 +145,8 @@ describe('LatestAppliesList', () => {
 describe('LatestPlansList', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Auth disabled stands for one known user, so widget settings are kept.
+    localStorage.setItem('auth_token', 'disabled_auth_dummy_token');
     clearQueryCache();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     inputs.projects = [

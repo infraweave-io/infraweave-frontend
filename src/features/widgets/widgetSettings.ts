@@ -1,4 +1,5 @@
 import React from 'react';
+import { readOwned, writeOwned } from '../../utils/ownedStorage';
 
 // A localStorage key name, not a credential; gitleaks' generic-api-key rule misreads it.
 const STORAGE_KEY = 'infraweave.widgetSettings.v1'; // gitleaks:allow
@@ -7,14 +8,18 @@ const STORAGE_KEY = 'infraweave.widgetSettings.v1'; // gitleaks:allow
 type StoredSettings = Record<string, Record<string, unknown>>;
 
 const readAll = (): StoredSettings => {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as StoredSettings)
-      : {};
-  } catch {
-    return {};
-  }
+  const stored = readOwned(STORAGE_KEY);
+  return stored && typeof stored === 'object' && !Array.isArray(stored)
+    ? (stored as StoredSettings)
+    : {};
+};
+
+/** Forgets a widget's settings, so one added again later starts from its defaults. */
+export const clearWidgetSettings = (widgetId: string): void => {
+  const all = readAll();
+  if (!(widgetId in all)) return;
+  delete all[widgetId];
+  writeOwned(STORAGE_KEY, all);
 };
 
 /** The id of the widget being rendered. `WidgetContainer` provides it. */
@@ -28,9 +33,9 @@ const isSameType = (stored: unknown, defaultValue: SettingValue): boolean =>
     : typeof stored === typeof defaultValue;
 
 /**
- * Like `useState`, but kept in this browser per widget, so a widget's filters and the like
- * survive a reload. A stored value of a different type than `defaultValue` is ignored. Outside a
- * `WidgetContainer` nothing is stored.
+ * Like `useState`, but kept in this browser per user and widget, so a widget's filters and the
+ * like survive a reload. A stored value of a different type than `defaultValue` is ignored.
+ * Outside a `WidgetContainer` nothing is stored.
  */
 export const useWidgetSetting = <T extends SettingValue>(
   name: string,
@@ -47,11 +52,7 @@ export const useWidgetSetting = <T extends SettingValue>(
     if (!widgetId) return;
     const all = readAll();
     all[widgetId] = { ...all[widgetId], [name]: next };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-    } catch {
-      // Storage full or blocked: the setting still applies until the page is left.
-    }
+    writeOwned(STORAGE_KEY, all);
   };
 
   return [value, update];
