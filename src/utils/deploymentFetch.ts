@@ -417,7 +417,9 @@ export type HistoryType = 'plans' | 'deleted';
 export type HistorySource = { projectId: string; region: string };
 
 const historyPath = ({ projectId, region }: HistorySource, type: HistoryType): string =>
-  `api/proxy/api/infraweave/api/v1/deployments/history/${projectId}/${region}?type=${type}`;
+  `api/proxy/api/infraweave/api/v1/deployments/history/${encodeURIComponent(
+    projectId,
+  )}/${encodeURIComponent(region)}?type=${type}`;
 
 /**
  * Pages per account and region. The route reads whole records in 1MB pages, keyed by
