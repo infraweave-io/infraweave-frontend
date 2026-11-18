@@ -47,8 +47,8 @@ const plural = (count: number, noun: string) =>
 /** Narrows what the status bar counts, e.g. to stack deployments on a stacks view. */
 export type FleetScope = {
   deployments: Deployment[];
-  /** Singular, e.g. `stack deployment`. */
-  noun: string;
+  /** E.g. `stack deployment` / `stack deployments`. */
+  noun: { singular: string; plural: string };
 };
 
 const ago = (epoch: number): string => {
@@ -213,13 +213,15 @@ export const FleetStatusBar = ({
   const { finished, total, percent } = summarise(fleet.progress?.sources);
   const counted = scope?.deployments ?? fleet.deployments;
   const accounts = React.useMemo(() => new Set(counted.map((d) => d.project_id)).size, [counted]);
+  const noun = scope?.noun ?? { singular: 'deployment', plural: 'deployments' };
+  const countedNoun = counted.length === 1 ? noun.singular : noun.plural;
 
   return (
     <Box sx={{ mb: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-          {plural(counted.length, scope?.noun ?? 'deployment')} across {plural(accounts, 'account')}
-          , updated {ago(fleet.fetchedAt)}
+          {counted.length.toLocaleString()} {countedNoun} across {plural(accounts, 'account')},
+          updated {ago(fleet.fetchedAt)}
           {refreshDescription(fleet.loadingDeployments, finished, total)}
         </Typography>
         <Button

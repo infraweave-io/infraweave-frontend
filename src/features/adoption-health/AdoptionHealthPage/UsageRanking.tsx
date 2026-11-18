@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { Deployment } from '../../../types/Deployment';
 import { isFailedDeployment } from '../../../utils/deploymentStatus';
-import type { UsageKind } from './usageContext';
+import { COUNT_NOUN, type CountNoun, type UsageKind } from './usageContext';
 
 /** Max height in px before the table scrolls instead of growing the page. */
 const TABLE_MAX_HEIGHT = 420;
@@ -75,6 +75,8 @@ export type UsageRankingProps = {
   loading?: boolean;
   selected: string;
   onSelect: (name: string) => void;
+  /** What a row's count counts. */
+  countNoun?: CountNoun;
 };
 
 export const UsageRanking = ({
@@ -84,6 +86,7 @@ export const UsageRanking = ({
   loading = false,
   selected,
   onSelect,
+  countNoun = COUNT_NOUN.standalone,
 }: UsageRankingProps) => {
   const rows = React.useMemo(() => rank(deployments, registered), [deployments, registered]);
   const inUse = rows.filter((row) => row.count > 0).length;
@@ -101,14 +104,14 @@ export const UsageRanking = ({
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        {inUse} of {rows.length} {kind}s have active deployments.
+        {inUse} of {rows.length} {kind}s have active {countNoun.plural}.
       </Typography>
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
-        <Table size="small" stickyHeader aria-label={`${kind}s by number of deployments`}>
+        <Table size="small" stickyHeader aria-label={`${kind}s by number of ${countNoun.plural}`}>
           <TableHead>
             <TableRow>
               <TableCell>{kind === 'stack' ? 'Stack' : 'Module'}</TableCell>
-              <TableCell sx={{ width: '35%' }}>Deployments</TableCell>
+              <TableCell sx={{ width: '35%' }}>{countNoun.label}</TableCell>
               <TableCell align="right">Failing</TableCell>
               <TableCell align="right">Accounts</TableCell>
               <TableCell align="right">Versions</TableCell>
@@ -142,7 +145,7 @@ export const UsageRanking = ({
                     <LinearProgress
                       variant="determinate"
                       value={(row.count / max) * 100}
-                      aria-label={`${row.name}: ${row.count} deployments`}
+                      aria-label={`${row.name}: ${row.count} ${countNoun.plural}`}
                       sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
                     />
                     <Typography

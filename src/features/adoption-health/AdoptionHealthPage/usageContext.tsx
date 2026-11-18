@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
-import { Box, Chip, Link as MuiLink, Typography } from '@mui/material';
+import { Box, Button, Chip, Link as MuiLink, Tooltip, Typography } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { Deployment } from '../../../types/Deployment';
 import { regionName } from './fleetSummary';
 
@@ -15,16 +16,20 @@ export type ContextKey = 'module' | 'region' | 'account';
 
 export type UsageKind = 'module' | 'stack';
 
-/**
- * `kind` distinguishes a module name from a stack name; names can overlap.
- * It only means something alongside `module` (the URL key), so it is dropped without one.
- */
-export type UsageContext = Partial<Record<ContextKey, string>> & { kind?: UsageKind };
+export type ModuleUsageMode = 'standalone' | 'in-stacks' | 'both';
+
+export type UsageContext = Partial<Record<ContextKey, string>> & {
+  kind?: UsageKind;
+  moduleUsageMode?: ModuleUsageMode;
+};
 
 const CONTEXT_KEYS: ContextKey[] = ['module', 'region', 'account'];
 
 const isUsageKind = (value: string | null): value is UsageKind =>
   value === 'module' || value === 'stack';
+
+const isModuleUsageMode = (value: string | null): value is ModuleUsageMode =>
+  value === 'standalone' || value === 'in-stacks' || value === 'both';
 
 export const usageHref = (view: UsageView, context: UsageContext): string => {
   const params = new URLSearchParams();
@@ -33,6 +38,9 @@ export const usageHref = (view: UsageView, context: UsageContext): string => {
     if (value) params.set(key, value);
     if (key === 'module' && value && context.kind) params.set('kind', context.kind);
   }
+  if (context.moduleUsageMode && context.moduleUsageMode !== 'standalone') {
+    params.set('moduleUsageMode', context.moduleUsageMode);
+  }
   const query = params.toString();
   return `/infraweave/adoption-health/${view}${query ? `?${query}` : ''}`;
 };
@@ -40,7 +48,10 @@ export const usageHref = (view: UsageView, context: UsageContext): string => {
 /** `set` changes one key and keeps the rest. */
 export const useUsageContext = () => {
   const [params, setParams] = useSearchParams();
-  const context: UsageContext = {};
+  const requestedMode = params.get('moduleUsageMode');
+  const context: UsageContext = {
+    moduleUsageMode: isModuleUsageMode(requestedMode) ? requestedMode : 'standalone',
+  };
   for (const key of CONTEXT_KEYS) {
     const value = params.get(key);
     if (value) context[key] = value;
@@ -65,7 +76,21 @@ export const useUsageContext = () => {
     [setParams],
   );
 
-  return { context, set };
+  const setModuleUsageMode = React.useCallback(
+    (mode: ModuleUsageMode) =>
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (mode === 'standalone') next.delete('moduleUsageMode');
+          else next.set('moduleUsageMode', mode);
+          return next;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+
+  return { context, set, setModuleUsageMode };
 };
 
 export const matchesFilters = (
@@ -126,6 +151,63 @@ const filterText = (
   projectNames: Record<string, string>,
 ): string => `${filterLabel(key, filters)}: ${describeFilter(key, filters[key]!, projectNames)}`;
 
+export const MODULE_USAGE_MODE_LABEL: Record<ModuleUsageMode, string> = {
+  standalone: 'Standalone',
+  'in-stacks': 'Within stacks',
+  both: 'Both',
+};
+
+/** How counts are worded. A row expanded from a deployed stack is a component use, not a deployment. */
+export type CountNoun = {
+  singular: string;
+  plural: string;
+  label: string;
+};
+
+export const COUNT_NOUN: Record<ModuleUsageMode, CountNoun> = {
+  standalone: {
+    singular: 'deployment',
+    plural: 'deployments',
+    label: 'Deployments',
+  },
+  'in-stacks': {
+    singular: 'use',
+    plural: 'uses',
+    label: 'Uses',
+  },
+  both: {
+    singular: 'deployment or use',
+    plural: 'deployments and uses',
+    label: 'Deployments and uses',
+  },
+};
+
+const sourceLabel = (filters: UsageContext): string | undefined =>
+  filters.module && filters.kind === 'module'
+    ? MODULE_USAGE_MODE_LABEL[filters.moduleUsageMode ?? 'standalone']
+    : undefined;
+
+/** Optional explanation for the source selector and module drill-downs. */
+export const ModuleUsageSourceHelp = () => (
+  <Tooltip
+    title="Within-stack module status, failures, and drift reflect the parent stack deployment, not a separate child deployment."
+    describeChild
+    arrow
+    placement="bottom-start"
+    enterTouchDelay={0}
+    leaveTouchDelay={10000}
+  >
+    <Button size="small" startIcon={<InfoOutlinedIcon fontSize="small" />}>
+      About stack metrics
+    </Button>
+  </Tooltip>
+);
+
+/** Compact cue for overview cards scrolled past the full warning. */
+export const StackUsageIncompleteChip = () => (
+  <Chip size="small" color="warning" variant="outlined" label="Counts may be incomplete" />
+);
+
 /** One-line filter summary for sections where the filter chips are scrolled out of view. */
 export const filterSummary = (
   filters: UsageContext,
@@ -134,10 +216,12 @@ export const filterSummary = (
   const parts = CONTEXT_KEYS.filter((key) => filters[key]).map((key) =>
     filterText(key, filters, projectNames),
   );
+  const source = sourceLabel(filters);
+  if (source) parts.push(`Source: ${source}`);
   return parts.length > 0 ? `Showing only ${parts.join(', ')}` : undefined;
 };
 
-/** Removable chips for the active filters, so a page opened from a link shows it is filtered. */
+/** Removable filter chips and the source of a selected module's drill-down. */
 export const ContextFilters = ({
   filters,
   projectNames,
@@ -148,6 +232,7 @@ export const ContextFilters = ({
   onClear: (key: ContextKey) => void;
 }) => {
   const active = CONTEXT_KEYS.filter((key) => filters[key]);
+  const source = sourceLabel(filters);
   if (active.length === 0) return null;
 
   return (
@@ -163,6 +248,12 @@ export const ContextFilters = ({
           onDelete={() => onClear(key)}
         />
       ))}
+      {source && (
+        <>
+          <Chip size="small" variant="outlined" label={`Source: ${source}`} />
+          <ModuleUsageSourceHelp />
+        </>
+      )}
     </Box>
   );
 };

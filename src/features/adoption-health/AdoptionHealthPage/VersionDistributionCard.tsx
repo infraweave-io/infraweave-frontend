@@ -18,12 +18,14 @@ import {
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import type { Deployment } from '../../../types/Deployment';
-import type { UsageKind } from './usageContext';
+import { COUNT_NOUN, type CountNoun, type UsageKind } from './usageContext';
 
 export type VersionDistributionCardProps = {
   kind: UsageKind;
   deployments: Deployment[];
   onVersionClick: (version: string) => void;
+  /** What the counts count. */
+  countNoun?: CountNoun;
 };
 
 type VersionDistributionRow = {
@@ -40,6 +42,7 @@ export const VersionDistributionCard = ({
   kind,
   deployments,
   onVersionClick,
+  countNoun = COUNT_NOUN.standalone,
 }: VersionDistributionCardProps) => {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
@@ -122,8 +125,8 @@ export const VersionDistributionCard = ({
         {filteredStats.length === 0 && (
           <Typography color="text.secondary">
             {deployments.length === 0
-              ? `No active deployments found for this ${kind}.`
-              : 'No deployments match the selected statuses.'}
+              ? `No active ${countNoun.plural} found for this ${kind}.`
+              : `No ${countNoun.plural} match the selected statuses.`}
           </Typography>
         )}
 
@@ -131,7 +134,7 @@ export const VersionDistributionCard = ({
           <>
             <Box sx={{ width: '100%', mb: 2 }}>
               <Typography variant="h6" gutterBottom align="center">
-                Active Deployments by Version
+                Active {countNoun.plural} by version
               </Typography>
               <BarChart
                 dataset={chartDataset}

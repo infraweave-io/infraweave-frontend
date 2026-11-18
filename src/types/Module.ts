@@ -34,14 +34,12 @@ export type Module = {
     },
   ];
   stack_data?: {
-    modules: [
-      {
-        module: string;
-        version: string;
-        s3_key: string;
-        track: string;
-      },
-    ];
+    modules: {
+      module: string;
+      version: string;
+      s3_key: string;
+      track?: string;
+    }[];
   };
   version_diff?: VersionDiff;
 };
