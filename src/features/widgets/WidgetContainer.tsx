@@ -18,7 +18,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { WIDGET_HEIGHT, WidgetHolder, WidgetLink } from './WidgetHolder';
-import { WidgetIdContext } from './widgetSettings';
+import { clearWidgetSettings, WidgetIdContext } from './widgetSettings';
 import { WidgetReload, WidgetReloadContext } from './widgetReload';
 
 export type WidgetDefinition = {
@@ -199,7 +199,10 @@ export const WidgetContainer = ({
                         <IconButton
                           size="small"
                           aria-label={`Remove ${title}`}
-                          onClick={() => onLayoutChange(placed.filter((other) => other.id !== id))}
+                          onClick={() => {
+                            clearWidgetSettings(id);
+                            onLayoutChange(placed.filter((other) => other.id !== id));
+                          }}
                         >
                           <CloseIcon fontSize="small" />
                         </IconButton>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useWidgetSetting, WidgetIdContext } from './widgetSettings';
+import { clearWidgetSettings, useWidgetSetting, WidgetIdContext } from './widgetSettings';
 
 const Counter = () => {
   const [count, setCount] = useWidgetSetting('count', 0);
@@ -24,9 +24,15 @@ const renderCounter = (widgetId: string | null) =>
     </WidgetIdContext.Provider>,
   );
 
+/** Settings as the hook stores them: with the user they belong to. */
+const storeSettings = (value: unknown, owner = 'auth-disabled') =>
+  localStorage.setItem('infraweave.widgetSettings.v1', JSON.stringify({ owner, value }));
+
 describe('useWidgetSetting', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Auth disabled stands for one known user, so settings are kept.
+    localStorage.setItem('auth_token', 'disabled_auth_dummy_token');
   });
 
   it('keeps a setting for the next time the widget mounts', async () => {
@@ -50,10 +56,7 @@ describe('useWidgetSetting', () => {
   });
 
   it('ignores a stored value of the wrong type', () => {
-    localStorage.setItem(
-      'infraweave.widgetSettings.v1',
-      JSON.stringify({ counter: { count: 'lots' } }),
-    );
+    storeSettings({ counter: { count: 'lots' } });
 
     renderCounter('counter');
 
@@ -65,7 +68,7 @@ describe('useWidgetSetting', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Count 0' }));
 
     expect(screen.getByRole('button', { name: 'Count 1' })).toBeInTheDocument();
-    expect(localStorage.length).toBe(0);
+    expect(localStorage.getItem('infraweave.widgetSettings.v1')).toBeNull();
   });
 
   it('keeps a list setting, and ignores a stored list that is not all strings', async () => {
@@ -85,15 +88,39 @@ describe('useWidgetSetting', () => {
     expect(screen.getByRole('button', { name: 'Picked vpc' })).toBeInTheDocument();
     second.unmount();
 
-    localStorage.setItem(
-      'infraweave.widgetSettings.v1',
-      JSON.stringify({ picker: { picked: ['vpc', 3] } }),
-    );
+    storeSettings({ picker: { picked: ['vpc', 3] } });
     render(
       <WidgetIdContext.Provider value="picker">
         <Picker />
       </WidgetIdContext.Provider>,
     );
     expect(screen.getByRole('button', { name: 'Picked none' })).toBeInTheDocument();
+  });
+
+  it('never reads another user’s settings', () => {
+    storeSettings({ counter: { count: 5 } }, 'https://issuer|someone-else');
+
+    renderCounter('counter');
+
+    expect(screen.getByRole('button', { name: 'Count 0' })).toBeInTheDocument();
+  });
+
+  it('stores nothing when the user is not known', async () => {
+    localStorage.removeItem('auth_token');
+    renderCounter('counter');
+    await userEvent.click(screen.getByRole('button', { name: 'Count 0' }));
+
+    expect(localStorage.getItem('infraweave.widgetSettings.v1')).toBeNull();
+  });
+
+  it('forgets a widget’s settings when it is cleared', async () => {
+    const first = renderCounter('counter');
+    await userEvent.click(screen.getByRole('button', { name: 'Count 0' }));
+    first.unmount();
+
+    clearWidgetSettings('counter');
+    renderCounter('counter');
+
+    expect(screen.getByRole('button', { name: 'Count 0' })).toBeInTheDocument();
   });
 });
