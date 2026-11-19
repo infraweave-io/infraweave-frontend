@@ -413,13 +413,31 @@ export const fetchDeployments = async (
 /** What the history route lists: plan runs, or deployments that were destroyed. */
 export type HistoryType = 'plans' | 'deleted';
 
-/** One account in one region, which is what the history route is asked about. */
-export type HistorySource = { projectId: string; region: string };
+/**
+ * One account in one region, which is what the history route is asked about, optionally
+ * narrowed to some deployment ids (at most 100).
+ */
+export type HistorySource = { projectId: string; region: string; deploymentIds?: string[] };
 
-const historyPath = ({ projectId, region }: HistorySource, type: HistoryType): string =>
+const historyPath = (
+  { projectId, region, deploymentIds }: HistorySource,
+  type: HistoryType,
+): string =>
   `api/proxy/api/infraweave/api/v1/deployments/history/${encodeURIComponent(
     projectId,
-  )}/${encodeURIComponent(region)}?type=${type}`;
+  )}/${encodeURIComponent(region)}?type=${type}${
+    deploymentIds?.length ? `&deployment_ids=${encodeURIComponent(deploymentIds.join(','))}` : ''
+  }`;
+
+/** The most deployment ids one history request can be narrowed to. */
+export const MAX_HISTORY_DEPLOYMENT_IDS = 100;
+
+/**
+ * Pages to follow when the history is narrowed to a few deployments. The route still walks
+ * every record of the account and region, but its pages then carry only the matches, so going
+ * to the end is cheap and is the only way to be sure a deployment is not there.
+ */
+const MAX_NARROWED_HISTORY_PAGES = 200;
 
 /**
  * Pages per account and region. The route reads whole records in 1MB pages, keyed by
@@ -448,7 +466,7 @@ export const fetchDeploymentHistory = async (
         historyPath(source, type),
         (rows) => pages[index].push(...rows),
         undefined,
-        MAX_HISTORY_PAGES,
+        source.deploymentIds?.length ? MAX_NARROWED_HISTORY_PAGES : MAX_HISTORY_PAGES,
       ),
   );
 

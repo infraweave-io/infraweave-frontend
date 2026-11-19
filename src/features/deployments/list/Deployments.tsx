@@ -23,6 +23,8 @@ import {
   Autocomplete,
   Tooltip,
   Chip,
+  Skeleton,
+  TableSortLabel,
 } from '@mui/material';
 import { MONO_FONT } from '../../../contexts/ThemeContext';
 import Refresh from '@mui/icons-material/Refresh';
@@ -44,6 +46,19 @@ import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { INCOMPLETE_REASON_TEXT } from '../../../utils/deploymentFetch';
 import { bestFuzzyScore, bestSubstringScore } from '../../../utils/fuzzyMatch';
 import { DeploymentPlansModal } from './DeploymentPlansModal';
+import {
+  COST_LIST_DAYS,
+  deploymentCostKey,
+  useDeploymentCosts,
+} from '../../../hooks/useDeploymentCosts';
+import { formatCost } from '../../../utils/cost';
+import {
+  FIRST_DIRECTION,
+  nextSort,
+  SortColumn,
+  SortKey,
+  sortDeployments,
+} from '../../../utils/deploymentSort';
 import HistoryIcon from '@mui/icons-material/History';
 
 type DenseTableProps = {
@@ -62,8 +77,65 @@ type DenseTableProps = {
   autoFocusSearch?: boolean;
 };
 
+/**
+ * A column header that sorts the list: a click sorts by it alone, a Shift+click adds it after the
+ * columns already sorted by. With more than one, each shows its place in the order.
+ */
+const SortableHeader = ({
+  label,
+  column,
+  sort,
+  onSort,
+}: {
+  label: string;
+  column: SortColumn;
+  sort: SortKey[];
+  onSort: (column: SortColumn, adding: boolean) => void;
+}) => {
+  const index = sort.findIndex((k) => k.column === column);
+  const key = index >= 0 ? sort[index] : undefined;
+  return (
+    <Tooltip
+      title={`Sort by ${label.toLowerCase()}. Shift+click to sort by it after the columns already sorted.`}
+      enterDelay={700}
+      placement="top"
+      describeChild
+    >
+      <TableSortLabel
+        active={!!key}
+        direction={key?.direction ?? FIRST_DIRECTION[column]}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSort(column, e.shiftKey);
+        }}
+        sx={{ font: 'inherit', letterSpacing: 'inherit', textTransform: 'inherit' }}
+      >
+        {label}
+        {key && sort.length > 1 && (
+          <Box
+            component="span"
+            sx={{ ml: 0.5, fontSize: '0.625rem', color: 'text.secondary' }}
+            aria-label={`sorted ${index + 1} of ${sort.length}`}
+          >
+            {index + 1}
+          </Box>
+        )}
+      </TableSortLabel>
+    </Tooltip>
+  );
+};
+
 // Component must be defined outside DenseTable to avoid re-creation on every render
-const RemovableHeader = ({ title, onRemove }: { title: string; onRemove: () => void }) => (
+const RemovableHeader = ({
+  title,
+  hideLabel,
+  onRemove,
+}: {
+  title: React.ReactNode;
+  /** Names the column in the hide button's label when `title` is not plain text. */
+  hideLabel?: string;
+  onRemove: () => void;
+}) => (
   <Box
     display="flex"
     alignItems="center"
@@ -78,7 +150,7 @@ const RemovableHeader = ({ title, onRemove }: { title: string; onRemove: () => v
       <IconButton
         className="column-hide"
         size="small"
-        aria-label={`Hide ${title} column`}
+        aria-label={`Hide ${hideLabel ?? title} column`}
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
@@ -114,6 +186,45 @@ const AddColumnChip = ({ label, onAdd }: { label: string; onAdd: () => void }) =
   />
 );
 
+/** A deployment's cost over the list's window: an amount, nothing yet, or why there is none. */
+const CostCell = ({
+  deployment,
+  costs,
+}: {
+  deployment: Deployment;
+  costs: ReturnType<typeof useDeploymentCosts>;
+}) => {
+  const failure = costs.failedProjects.get(deployment.project_id);
+  if (failure) {
+    return (
+      <Tooltip title={`Cost unavailable: ${failure}`}>
+        <Typography variant="body2" color="text.disabled">
+          —
+        </Typography>
+      </Tooltip>
+    );
+  }
+  if (!costs.loadedProjects.has(deployment.project_id)) {
+    return <Skeleton variant="text" width={48} />;
+  }
+  // A deployment Cost Explorer has no line for cost nothing in the window.
+  const amount = costs.costs.get(
+    deploymentCostKey(deployment.project_id, deployment.deployment_id),
+  );
+  return (
+    <Typography
+      variant="body2"
+      sx={{
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'nowrap',
+        color: amount ? 'text.primary' : 'text.secondary',
+      }}
+    >
+      {formatCost(amount ?? 0, costs.unit)}
+    </Typography>
+  );
+};
+
 export const DenseTable = ({
   deployments,
   projects,
@@ -128,6 +239,10 @@ export const DenseTable = ({
   const [showAccount, setShowAccount] = useState(false);
   const [showDriftCheck, setShowDriftCheck] = useState(false);
   const [showRegion, setShowRegion] = useState(true);
+  const [showCost, setShowCost] = useState(true);
+  const [sort, setSort] = useState<SortKey[]>([]);
+  const handleSort = (column: SortColumn, adding: boolean) =>
+    setSort((prev) => nextSort(prev, column, adding));
   const [showPlansModal, setShowPlansModal] = useState(false);
 
   const hiddenColumns = [
@@ -135,44 +250,46 @@ export const DenseTable = ({
     { label: 'Account', visible: showAccount, show: setShowAccount },
     { label: 'Region', visible: showRegion, show: setShowRegion },
     { label: 'Drift check', visible: showDriftCheck, show: setShowDriftCheck },
+    { label: 'Cost', visible: showCost, show: setShowCost },
   ].filter((column) => !column.visible);
 
+  // Hiding the column also stops the Cost Explorer queries, which are billed per request.
+  const deploymentCosts = useDeploymentCosts(deployments, showCost);
+
+  const sortable = (label: string, column: SortColumn) => (
+    <SortableHeader label={label} column={column} sort={sort} onSort={handleSort} />
+  );
+  /** An optional column's header: sortable, with the control that hides it. */
+  const removable = (label: string, column: SortColumn, hide: () => void) =>
+    (<RemovableHeader title={sortable(label, column)} hideLabel={label} onRemove={hide} />) as any;
+
   const columns: TableColumn[] = [
-    { title: 'Name', field: 'name' },
-    { title: 'Namespace', field: 'namespace' },
+    { title: sortable('Name', 'name') as any, field: 'name' },
+    { title: sortable('Namespace', 'namespace') as any, field: 'namespace' },
     ...(showAccount
-      ? [
-          {
-            title: (
-              <RemovableHeader title="Account" onRemove={() => setShowAccount(false)} />
-            ) as any,
-            field: 'account',
-          },
-        ]
+      ? [{ title: removable('Account', 'account', () => setShowAccount(false)), field: 'account' }]
       : []),
     ...(showRegion
-      ? [
-          {
-            title: (
-              <RemovableHeader title="Region" onRemove={() => setShowRegion(false)} />
-            ) as any,
-            field: 'region',
-          },
-        ]
+      ? [{ title: removable('Region', 'region', () => setShowRegion(false)), field: 'region' }]
       : []),
-    { title: 'Status', field: 'status' },
+    { title: sortable('Status', 'status') as any, field: 'status' },
     ...(showTimestamp
       ? [
           {
-            title: (
-              <RemovableHeader title="Timestamp" onRemove={() => setShowTimestamp(false)} />
-            ) as any,
+            title: removable('Timestamp', 'timestamp', () => setShowTimestamp(false)),
             field: 'timestamp',
-            customSort: (a: any, b: any) => (a.epoch || 0) - (b.epoch || 0),
           },
         ]
       : []),
-    { title: 'Version', field: 'module_version' },
+    { title: sortable('Version', 'version') as any, field: 'module_version' },
+    ...(showCost
+      ? [
+          {
+            title: removable(`Cost (${COST_LIST_DAYS}d)`, 'cost', () => setShowCost(false)),
+            field: 'cost',
+          },
+        ]
+      : []),
     ...(showDriftCheck
       ? [
           {
@@ -261,6 +378,44 @@ export const DenseTable = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployments, projects, query, searching]);
 
+  // On top of the search order, so a sorted search still only holds its matches. A hidden
+  // column stops sorting, rather than ordering the list by something no longer shown.
+  const sortedDeployments = useMemo(() => {
+    const shown: Record<SortColumn, boolean> = {
+      name: true,
+      namespace: true,
+      account: showAccount,
+      region: showRegion,
+      status: true,
+      timestamp: showTimestamp,
+      version: true,
+      cost: showCost,
+    };
+    return sortDeployments(
+      visibleDeployments,
+      sort.filter((k) => shown[k.column]),
+      {
+        account: accountName,
+        // A deployment whose account's cost has not arrived (or failed) is not known; one
+        // with no cost in the window costs nothing.
+        cost: (d) =>
+          deploymentCosts.loadedProjects.has(d.project_id)
+            ? deploymentCosts.costs.get(deploymentCostKey(d.project_id, d.deployment_id)) ?? 0
+            : undefined,
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    visibleDeployments,
+    sort,
+    showAccount,
+    showRegion,
+    showTimestamp,
+    showCost,
+    deploymentCosts,
+    projects,
+  ]);
+
   const hiddenCount = deployments.length - visibleDeployments.length;
   // Terse on purpose: this sits in the table's toolbar between the column chips
   // and the History button, and a sentence there costs the search box its width.
@@ -275,7 +430,7 @@ export const DenseTable = ({
           `${hiddenCount} hidden`
         : null;
 
-  const data = visibleDeployments.map((deployment) => {
+  const data = sortedDeployments.map((deployment) => {
     const encodedEnvironment = encodeURIComponent(deployment.environment ?? '');
     const encodedDeploymentId = encodeURIComponent(deployment.deployment_id ?? '');
     const project = deployment.project_id;
@@ -375,6 +530,7 @@ export const DenseTable = ({
       has_drifted: (
         <SyncBadge deployment={deployment} disabled={!deployment?.drift_detection?.enabled} />
       ),
+      cost: <CostCell deployment={deployment} costs={deploymentCosts} />,
     };
   });
 

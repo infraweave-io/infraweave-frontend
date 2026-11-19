@@ -24,6 +24,7 @@ import { SelectedProjectsProvider } from './SelectedProjectsContext';
 import { SelectedProvidersProvider } from './SelectedProvidersContext';
 import { Projects } from './Projects';
 import { AdoptionHealthPage } from '../../adoption-health';
+import { CostPage } from '../../cost';
 
 /** `id` is the URL segment, since a label like "Adoption & Health" cannot be one. */
 const tabs = [
@@ -35,6 +36,7 @@ const tabs = [
   { id: 'policies', label: 'Policies' },
   { id: 'projects', label: 'Projects' },
   { id: 'adoption-health', label: 'Adoption & Health' },
+  { id: 'cost', label: 'Cost' },
 ];
 
 interface TabLayoutProps {
@@ -155,6 +157,8 @@ export const RootPage = () => {
         );
       case 'adoption-health':
         return <AdoptionHealthPage />;
+      case 'cost':
+        return <CostPage />;
       default:
         return (
           <InfoCard title="Nothing here">

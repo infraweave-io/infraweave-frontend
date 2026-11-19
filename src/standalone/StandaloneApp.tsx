@@ -31,6 +31,7 @@ import PolicyIcon from '@mui/icons-material/Policy';
 import ProjectIcon from '@mui/icons-material/Folder';
 import ProviderIcon from '@mui/icons-material/Cloud';
 import InsightsIcon from '@mui/icons-material/Insights';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useConfig } from '../hooks/useConfig';
 import { ThemeProviderWrapper } from '../contexts/ThemeContext';
@@ -90,6 +91,7 @@ const mainNavItems = [
 
 const analyticsNavItems = [
   { label: 'Adoption & Health', path: '/infraweave/adoption-health', icon: <InsightsIcon /> },
+  { label: 'Cost', path: '/infraweave/cost', icon: <PaidOutlinedIcon /> },
 ];
 
 const navSections = [

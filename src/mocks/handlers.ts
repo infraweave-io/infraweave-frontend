@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { modules } from './modules';
 import { projects } from './projects';
 import { policies } from './policies';
@@ -287,4 +287,407 @@ export const handlers = [
   http.get(`${backendBaseUrl}/api/v1/events/:project/:region/:environment/:deploymentId`, () =>
     HttpResponse.json([]),
   ),
+  // Every deployment's cost in an account, and per resource: made-up amounts that stay the same
+  // between loads, with every fourth deployment missing, as Cost Explorer omits those that cost
+  // nothing.
+  // Cost Explorer takes a while per account; staggered so the page's progress bar has something
+  // to show.
+  http.get(`${backendBaseUrl}/api/v1/costs/:project/:region`, async ({ params, request }) => {
+    await delay(400 + (mockHash(String(params.project)) % 1600));
+    return mockAccountCosts(String(params.project), new URL(request.url).searchParams);
+  }),
+  http.get(`${backendBaseUrl}/api/v1/deployments/history/:project/:region`, ({ params, request }) =>
+    HttpResponse.json(
+      new URL(request.url).searchParams.get('type') === 'deleted'
+        ? (MOCK_DELETED_DEPLOYMENTS[String(params.project)] ?? []).filter(
+            (d) =>
+              d.region === String(params.region) &&
+              (listParam(new URL(request.url).searchParams, 'deployment_ids').length === 0 ||
+                listParam(new URL(request.url).searchParams, 'deployment_ids').includes(
+                  d.deployment_id,
+                )),
+          )
+        : [],
+    ),
+  ),
+  // The tag keys Cost Explorer has cost for, as its own Group by > Tag list shows them.
+  http.get(`${backendBaseUrl}/api/v1/cost_tags/:project/:region`, ({ params }) =>
+    HttpResponse.json({
+      project_id: String(params.project),
+      start: new Date(Date.now() - 89 * 86_400_000).toISOString().slice(0, 10),
+      end: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+      tag_keys: [
+        'aws:createdBy',
+        'Environment',
+        'INFRAWEAVE_ENVIRONMENT',
+        'INFRAWEAVE_MODULE_TRACK',
+        'INFRAWEAVE_MODULE_VERSION',
+        'Name',
+        'Owner',
+        'application',
+        'eks:eks-cluster-name',
+        'eks:kubernetes-node-pool-name',
+        'team',
+      ],
+    }),
+  ),
+  http.get(`${backendBaseUrl}/api/v1/cost_resources/:project/:region`, ({ params, request }) =>
+    mockResourceCosts(
+      String(params.project),
+      String(params.region),
+      new URL(request.url).searchParams,
+    ),
+  ),
+  http.get(
+    `${backendBaseUrl}/api/v1/cost/:project/:region/:environment/:deploymentId`,
+    ({ params, request }) => mockDeploymentCost(params, new URL(request.url).searchParams),
+  ),
 ];
+
+// Made-up but stable: the same deployment and options always return the same numbers.
+function mockDeploymentCost(params: Record<string, any>, query: URLSearchParams) {
+  const granularity = (query.get('granularity') ?? 'DAILY').toUpperCase();
+  const periods = Number(
+    query.get('periods') ?? (granularity === 'MONTHLY' ? 6 : granularity === 'HOURLY' ? 24 : 30),
+  );
+  const groupBy = query.get('group_by') ?? 'SERVICE';
+  if (granularity === 'HOURLY' && periods > 14 * 24) {
+    return HttpResponse.json(
+      {
+        error:
+          'Cost Explorer rejected the query: Hourly data is only available for the last 14 days',
+      },
+      { status: 400 },
+    );
+  }
+  const keysByDimension: Record<string, string[]> = {
+    SERVICE: [
+      'Amazon Elastic Compute Cloud - Compute',
+      'Amazon Simple Storage Service',
+      'AWS Key Management Service',
+      'Amazon CloudWatch',
+      'Amazon Virtual Private Cloud',
+      'AWS Lambda',
+      'Amazon DynamoDB',
+    ],
+    REGION: [String(params.region), 'global'],
+  };
+  const keys = keysByDimension[groupBy] ?? ['Usage A', 'Usage B', 'Usage C'];
+  // Unblended leaves out Savings Plan coverage, so it comes out lower than amortized.
+  const metricScale = query.get('metric') === 'UnblendedCost' ? 0.85 : 1;
+  const scale =
+    (granularity === 'MONTHLY' ? 30 : granularity === 'HOURLY' ? 1 / 24 : 1) * metricScale;
+  const step = granularity === 'MONTHLY' ? 0 : granularity === 'HOURLY' ? 3600_000 : 86_400_000;
+  const now = new Date();
+  const fmt = (d: Date) =>
+    granularity === 'HOURLY'
+      ? d.toISOString().replace(/\.\d{3}Z$/, 'Z')
+      : d.toISOString().slice(0, 10);
+  const periodStart = (i: number) => {
+    if (granularity === 'MONTHLY')
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (periods - 1 - i), 1));
+    const base =
+      granularity === 'HOURLY'
+        ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours())
+        : Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return new Date(base - (periods - 1 - i) * step);
+  };
+  const totals = new Map<string, number>();
+  const result = Array.from({ length: periods }, (_, i) => {
+    const start = periodStart(i);
+    const end = granularity === 'MONTHLY' ? periodStart(i + 1) : new Date(start.getTime() + step);
+    const groups = keys
+      .map((k, j) => ({
+        keys: [k],
+        amount: Number(((6 / (j + 1)) * scale * (1 + 0.3 * Math.sin(i + j))).toFixed(6)),
+      }))
+      .sort((a, b) => b.amount - a.amount);
+    groups.forEach((g) => totals.set(g.keys[0], (totals.get(g.keys[0]) ?? 0) + g.amount));
+    return {
+      start: fmt(start),
+      end: fmt(end),
+      estimated: i === periods - 1,
+      total: groups.reduce((sum, g) => sum + g.amount, 0),
+      groups,
+    };
+  });
+  const groups = [...totals]
+    .map(([k, amount]) => ({ keys: [k], amount }))
+    .sort((a, b) => b.amount - a.amount);
+  return HttpResponse.json({
+    project_id: params.project,
+    region: params.region,
+    environment: decodeURIComponent(String(params.environment)),
+    deployment_id: decodeURIComponent(String(params.deploymentId)),
+    tag_key: 'INFRAWEAVE_DEPLOYMENT_ID',
+    tag_value: decodeURIComponent(String(params.deploymentId)),
+    granularity,
+    metric: query.get('metric') ?? 'AmortizedCost',
+    group_by: groupBy ? [groupBy] : [],
+    start: result[0]?.start,
+    end: result[result.length - 1]?.end,
+    unit: 'USD',
+    total: groups.reduce((sum, g) => sum + g.amount, 0),
+    groups,
+    periods: result,
+  });
+}
+
+const mockHash = (text: string) => [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+const MOCK_SERVICES = [
+  'Amazon Elastic Compute Cloud - Compute',
+  'Amazon Simple Storage Service',
+  'AWS Key Management Service',
+  'Amazon CloudWatch',
+  'Amazon Relational Database Service',
+  'AWS Lambda',
+];
+
+const listParam = (query: URLSearchParams, name: string) =>
+  (query.get(name) ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+function mockPeriods(granularity: string, periods: number) {
+  const now = new Date();
+  const fmt = (d: Date) =>
+    granularity === 'HOURLY'
+      ? d.toISOString().replace(/\.\d{3}Z$/, 'Z')
+      : d.toISOString().slice(0, 10);
+  const startOf = (i: number) => {
+    const back = periods - 1 - i;
+    if (granularity === 'MONTHLY') {
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+    }
+    if (granularity === 'HOURLY') {
+      return new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()) -
+          back * 3600_000,
+      );
+    }
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - back * 86_400_000,
+    );
+  };
+  return Array.from({ length: periods }, (_, i) => ({
+    start: fmt(startOf(i)),
+    end: fmt(startOf(i + 1)),
+  }));
+}
+
+/** Destroyed deployments, which still have cost from while they ran. */
+const MOCK_DELETED_DEPLOYMENTS: Record<string, any[]> = {
+  '123808927999': [
+    {
+      project_id: '123808927999',
+      region: 'us-west-2',
+      environment: 'playground/infraweave_cli',
+      deployment_id: 's3bucket/preview-pr42',
+      module: 's3bucket',
+      status: 'successful',
+      deleted: true,
+      epoch: Date.now() - 5 * 86_400_000,
+    },
+  ],
+};
+
+/** Deployment ids on resources InfraWeave has no record of, e.g. tags copied by hand. */
+const MOCK_UNRECORDED_DEPLOYMENTS: Record<string, string[]> = {
+  '123808927998': ['ec2/handmade-instance'],
+};
+
+function mockAccountDeployments(project: string) {
+  return [
+    ...new Map(
+      Object.entries(DEPLOYMENTS_BY_PROJECT[project] ?? {}).flatMap(([region, list]) =>
+        list.map((d: any) => [String(d.deployment_id), region] as [string, string]),
+      ),
+    ),
+  ]
+    .filter(([id]) => mockHash(id) % 4 !== 0)
+    .concat(
+      (MOCK_DELETED_DEPLOYMENTS[project] ?? []).map((d) => [d.deployment_id, d.region]),
+      (MOCK_UNRECORDED_DEPLOYMENTS[project] ?? []).map((id) => [id, 'us-west-2']),
+    );
+}
+
+/** A stable made-up value of `key` on a deployment's resources; empty for some, as untagged. */
+function mockTagValue(key: string, deploymentId: string) {
+  if (key === 'INFRAWEAVE_ENVIRONMENT') {
+    const known = [
+      ...Object.values(DEPLOYMENTS_BY_PROJECT).flatMap((regions) => Object.values(regions).flat()),
+      ...Object.values(MOCK_DELETED_DEPLOYMENTS).flat(),
+    ].find((d: any) => d.deployment_id === deploymentId);
+    return known?.environment ?? '';
+  }
+  const choice = mockHash(`${key}|${deploymentId}`);
+  if (key === 'INFRAWEAVE_MODULE_VERSION') return `0.0.${choice % 4}`;
+  if (key === 'INFRAWEAVE_MODULE_TRACK') return ['stable', 'dev', 'beta'][choice % 3];
+  if (key === 'INFRAWEAVE_GIT_ACTOR_USERNAME') return ['alice', 'bob', 'carol'][choice % 3];
+  return ['platform', 'data', 'payments', ''][choice % 4];
+}
+
+function mockAccountCosts(project: string, query: URLSearchParams) {
+  const granularity = (query.get('granularity') ?? 'DAILY').toUpperCase();
+  const totalsOnly = query.get('series') === 'false';
+  const periods = query.get('start')
+    ? 1
+    : Number(
+        query.get('periods') ??
+          (granularity === 'MONTHLY' ? 6 : granularity === 'HOURLY' ? 24 : 30),
+      );
+  const rawGroupBy = query.get('group_by') || null;
+  const groupTag = rawGroupBy?.toLowerCase().startsWith('tag:') ? rawGroupBy.slice(4) : null;
+  const groupBy = groupTag ? `tag:${groupTag}` : rawGroupBy?.toUpperCase() || null;
+  const tagFilters: Record<string, string[]> = JSON.parse(query.get('tag_filters') || '{}');
+  const deploymentFilter = listParam(query, 'deployment_ids');
+  const moduleFilter = listParam(query, 'modules');
+  const serviceFilter = listParam(query, 'services');
+  const regionFilter = listParam(query, 'regions');
+  // Unblended leaves out Savings Plan coverage, so it comes out lower than amortized.
+  const metricScale = query.get('metric') === 'UnblendedCost' ? 0.85 : 1;
+  const scale =
+    (granularity === 'MONTHLY' ? 30 : granularity === 'HOURLY' ? 1 / 24 : 1) * metricScale;
+
+  const deployments = mockAccountDeployments(project).filter(
+    ([id]) =>
+      (deploymentFilter.length === 0 || deploymentFilter.includes(id)) &&
+      (moduleFilter.length === 0 || moduleFilter.includes(id.split('/')[0])),
+  );
+  // Each deployment spends on two or three services, in its own region plus a little global.
+  const lines = deployments
+    .flatMap(([id, region]) =>
+      MOCK_SERVICES.filter(
+        (_, j) => (mockHash(id) >> j) % 3 === 0 || j === mockHash(id) % 6,
+      ).flatMap((service, j) => [
+        { id, service, region, base: ((mockHash(id + service) % 900) / 100) * (j === 0 ? 3 : 1) },
+        ...(j === 0 ? [{ id, service, region: 'global', base: 0.4 }] : []),
+      ]),
+    )
+    .filter(
+      (l) =>
+        (serviceFilter.length === 0 || serviceFilter.includes(l.service)) &&
+        (regionFilter.length === 0 || regionFilter.includes(l.region)) &&
+        Object.entries(tagFilters).every(([key, values]) =>
+          values.includes(mockTagValue(key, l.id)),
+        ),
+    );
+  const keyOf = (l: (typeof lines)[number]) =>
+    groupTag
+      ? mockTagValue(groupTag, l.id)
+      : groupBy === 'SERVICE'
+        ? l.service
+        : groupBy === 'REGION'
+          ? l.region
+          : groupBy
+            ? `${groupBy.toLowerCase()} ${mockHash(l.service) % 3}`
+            : '';
+
+  const sum = (entries: [string, number][]) => {
+    const totals = new Map<string, number>();
+    entries.forEach(([k, v]) => totals.set(k, (totals.get(k) ?? 0) + v));
+    return [...totals].sort((a, b) => b[1] - a[1]);
+  };
+  const periodList = mockPeriods(
+    totalsOnly ? 'MONTHLY' : granularity,
+    totalsOnly ? 1 : periods,
+  ).map((p, i) => {
+    const amounts = lines.map((l) => ({
+      line: l,
+      amount: Number(
+        (
+          l.base *
+          scale *
+          (totalsOnly ? periods : 1) *
+          (1 + 0.3 * Math.sin(i + mockHash(l.id)))
+        ).toFixed(6),
+      ),
+    }));
+    return { ...p, amounts };
+  });
+  const all = periodList.flatMap((p) => p.amounts);
+  const total = all.reduce((t, a) => t + a.amount, 0);
+
+  return HttpResponse.json({
+    tag_key: 'INFRAWEAVE_DEPLOYMENT_ID',
+    project_id: project,
+    granularity: totalsOnly ? 'MONTHLY' : granularity,
+    start: periodList[0]?.start,
+    end: periodList[periodList.length - 1]?.end,
+    metric: query.get('metric') ?? 'AmortizedCost',
+    group_by: groupBy,
+    unit: 'USD',
+    estimated: true,
+    total,
+    deployments: sum(all.map((a) => [a.line.id, a.amount])).map(([deployment_id, amount]) => ({
+      deployment_id,
+      amount,
+    })),
+    ...(groupBy && {
+      groups: sum(all.map((a) => [keyOf(a.line), a.amount])).map(([key, amount]) => ({
+        key,
+        amount,
+      })),
+      breakdown: sum(all.map((a) => [`${a.line.id}\u0000${keyOf(a.line)}`, a.amount])).map(
+        ([k, amount]) => {
+          const [deployment_id, key] = k.split('\u0000');
+          return { deployment_id, key, amount };
+        },
+      ),
+    }),
+    periods: periodList.map((p, i) => ({
+      start: p.start,
+      end: p.end,
+      estimated: i === periodList.length - 1,
+      total: p.amounts.reduce((t, a) => t + a.amount, 0),
+      deployments: sum(p.amounts.map((a) => [a.line.id, a.amount])).map(
+        ([deployment_id, amount]) => ({ deployment_id, amount }),
+      ),
+      ...(groupBy && {
+        groups: sum(p.amounts.map((a) => [keyOf(a.line), a.amount])).map(([key, amount]) => ({
+          key,
+          amount,
+        })),
+      }),
+    })),
+  });
+}
+
+function mockResourceCosts(project: string, region: string, query: URLSearchParams) {
+  const deploymentFilter = listParam(query, 'deployment_ids');
+  if (deploymentFilter.length === 0 && listParam(query, 'services').length === 0) {
+    return HttpResponse.json(
+      { error: 'Resource costs need deployment_ids or services to narrow them to' },
+      { status: 400 },
+    );
+  }
+  const days = Number(query.get('days') ?? 14);
+  const resources = mockAccountDeployments(project)
+    .filter(([id]) => deploymentFilter.length === 0 || deploymentFilter.includes(id))
+    .flatMap(([id, deploymentRegion]) => {
+      const name = id.split('/').pop() ?? id;
+      return [
+        `arn:aws:s3:::${name.replace(/_/g, '-')}`,
+        `arn:aws:kms:${deploymentRegion || region}:${project}:key/${mockHash(id).toString(16)}-kms`,
+        `arn:aws:logs:${deploymentRegion || region}:${project}:log-group:/infraweave/${name}`,
+      ].map((resource_id) => ({
+        deployment_id: id,
+        resource_id,
+        amount: ((mockHash(resource_id) % 4000) / 1000) * days,
+      }));
+    })
+    .sort((a, b) => b.amount - a.amount);
+  return HttpResponse.json({
+    tag_key: 'INFRAWEAVE_DEPLOYMENT_ID',
+    project_id: project,
+    start: new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10),
+    end: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+    metric: query.get('metric') ?? 'AmortizedCost',
+    unit: 'USD',
+    estimated: true,
+    total: resources.reduce((t, r) => t + r.amount, 0),
+    resources,
+  });
+}

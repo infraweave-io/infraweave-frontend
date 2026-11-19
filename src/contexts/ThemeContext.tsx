@@ -59,6 +59,31 @@ export const useChartStatusColors = () => {
   return CHART_STATUS_COLORS[mode];
 };
 
+/**
+ * Chart series colours for categories with no meaning of their own (cost per
+ * service, ...), assigned in this order. Validated as adjacent pairs on the card
+ * surface of each mode: CVD ΔE 9.1 light / 8.4 dark, normal-vision ΔE 19+. In
+ * light mode slots 3-5 sit under 3:1 against white, so a chart using them must
+ * also show its values as text (a table or labels).
+ *
+ * `other` is the neutral for whatever is folded together past the last slot.
+ */
+export const CHART_CATEGORICAL_COLORS = {
+  light: {
+    series: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'],
+    other: '#94a3b8',
+  },
+  dark: {
+    series: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'],
+    other: '#6b7280',
+  },
+} as const;
+
+export const useChartCategoricalColors = () => {
+  const { mode } = useThemeMode();
+  return CHART_CATEGORICAL_COLORS[mode];
+};
+
 const UI_FONT = [
   'Inter',
   '-apple-system',
