@@ -54,6 +54,11 @@ const NO_VERSIONS: Module[] = [];
 /** Shared empty default for optional parent-stack module rows. */
 const NO_STACK_MODULE_DEPLOYMENTS: StackModuleUsage[] = [];
 
+type ResourceType = 'module' | 'stack';
+
+/** Display name per resource type; a new type fails to compile until it is labelled. */
+const RESOURCE_LABEL: Record<ResourceType, string> = { module: 'Module', stack: 'Stack' };
+
 /** A popular module has hundreds of deployments, so all are loaded but one page is rendered. */
 const DEPLOYMENTS_PAGE_SIZE = 50;
 const DEPLOYMENTS_PAGE_SIZES = [25, 50, 100, 250];
@@ -64,7 +69,7 @@ type DenseTableProps = {
   hideTitle?: boolean;
   showTrack?: boolean;
   onVersionClick?: () => void;
-  resourceType?: 'module' | 'stack';
+  resourceType?: ResourceType;
   onCompare?: (version: string, track?: string) => void;
   moduleName?: string;
   includeDev000?: boolean;
@@ -239,7 +244,7 @@ export const DenseTable = ({
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box display="flex" alignItems="center">
               <Typography variant="h6" sx={{ mr: 2 }}>
-                {hideTitle ? '' : resourceType === 'stack' ? 'Stack Versions' : 'Module Versions'}
+                {hideTitle ? '' : `${RESOURCE_LABEL[resourceType]} Versions`}
               </Typography>
               {onIncludeDev000Change && (
                 <FormControlLabel
@@ -343,7 +348,7 @@ export const DeploymentsDialog = ({
   moduleName: string;
   version: string;
   knownVersions?: Module[];
-  resourceType?: 'module' | 'stack';
+  resourceType?: ResourceType;
   /** Starting selection when opened from a narrowed view. Omitted, everything is selected. */
   initialProjectIds?: string[];
   initialRegions?: string[];
@@ -623,7 +628,7 @@ export const DeploymentsDialog = ({
     { title: 'Environment', field: 'environment' },
     { title: 'Region', field: 'region' },
     ...(stackModuleDeployments.length > 0 ? [{ title: 'Parent stack', field: 'stack_name' }] : []),
-    { title: 'Version', field: 'module_version' },
+    { title: `${RESOURCE_LABEL[resourceType]} Version`, field: 'module_version' },
     { title: 'Status', field: 'status' },
   ];
 
@@ -794,7 +799,7 @@ export const ModuleVersions = ({
   hideTitle?: boolean;
   allTracks?: boolean;
   onVersionClick?: () => void;
-  resourceType?: 'module' | 'stack';
+  resourceType?: ResourceType;
   onCompare?: (version: string, track?: string) => void;
 }) => {
   const config = useConfig();
