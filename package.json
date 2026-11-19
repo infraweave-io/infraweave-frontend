@@ -57,6 +57,7 @@
     "react-router-dom": "^7.18.2",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
+    "semver": "^7.7.4",
     "vscode-diff": "^3.0.1"
   },
   "peerDependencies": {
@@ -82,7 +83,7 @@
     "tailwindcss": "^4.2.3",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.59.0",
-    "vite": "^8.2.2",
+    "vite": "^8.3.5",
     "vitest": "^4.1.5"
   },
   "files": [
@@ -102,5 +103,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "overrides": {
+    "dompurify": "^3.4.17"
   }
 }
