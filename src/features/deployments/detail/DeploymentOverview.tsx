@@ -27,6 +27,7 @@ import SyncBadge from '../../../shared/components/SyncBadge';
 import { DeploymentIdBadge, EnvironmentBadge } from '../../../shared/components/DeploymentBadges';
 import { InputsOutputs } from './InputsOutputs';
 import { RecentEvents } from './Events';
+import { DeploymentCost } from './DeploymentCost';
 import PopoverExample from './PopOver';
 import { useConfig } from '../../../hooks/useConfig';
 
@@ -286,6 +287,10 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
           <InputsOutputs deployment={deployment} />
         </div>
       </div>
+
+      <Box marginTop={3}>
+        <DeploymentCost deployment={deployment} />
+      </Box>
 
       <Box marginTop={3}>
         <RecentEvents deployment={deployment} />
