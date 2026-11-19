@@ -108,13 +108,13 @@ describe('useStackModuleUsage', () => {
       {
         module: 's3bucket',
         module_version: '0.0.36-dev+test.6',
-        module_track: '',
+        module_track: 'dev',
         componentIndex: 0,
       },
       {
         module: 's3bucket',
         module_version: '0.0.36-dev+test.6',
-        module_track: '',
+        module_track: 'dev',
         componentIndex: 1,
       },
     ]);
@@ -140,7 +140,7 @@ describe('useStackModuleUsage', () => {
     expect(result.current.uses[4]).toMatchObject({
       module: 'ec2',
       module_version: '0.0.5-dev+main.1',
-      module_track: '',
+      module_track: 'dev',
       deployment_id: 'deployment-3',
       componentIndex: 0,
     });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography, Grid, Box, Link, ToggleButtonGroup } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   InfoCard,
   StructuredMetadataTable,
@@ -28,7 +29,17 @@ export const InformationTab: React.FC<InformationTabProps> = ({
 }) => {
   const isStack = resourceType === 'stack';
   const resourceLabel = isStack ? 'Stack' : 'Module';
-
+  const stackModules = new Map<
+    string,
+    { module: string; version: string; track?: string; count: number }
+  >();
+  for (const m of data?.stack_data?.modules ?? []) {
+    if (!m) continue;
+    const key = `${m.module}@${m.version}#${m.track ?? ''}`;
+    const existing = stackModules.get(key);
+    if (existing) existing.count++;
+    else stackModules.set(key, { ...m, count: 1 });
+  }
   return (
     <Content>
       <Grid container spacing={3}>
@@ -63,6 +74,36 @@ export const InformationTab: React.FC<InformationTabProps> = ({
                     ))}
                   </>
                 ),
+                ...(isStack && {
+                  'Stack Composition': (
+                    <>
+                      {[...stackModules].map(([key, m]) => (
+                        <div key={key} style={{ lineHeight: '1.6em', marginBottom: '0.1em' }}>
+                          {m.track ? (
+                            <Link
+                              component={RouterLink}
+                              to={`/infraweave/module/${m.track}/${encodeURIComponent(
+                                m.module,
+                              )}/${encodeURIComponent(m.version)}`}
+                            >
+                              {m.module}
+                              {': '}
+                              <strong>{m.version}</strong>
+                            </Link>
+                          ) : (
+                            <>
+                              {m.module}
+                              {': '}
+                              <strong>{m.version}</strong>
+                            </>
+                          )}
+                          {m.track && ` (${m.track})`}
+                          {m.count > 1 && ` ×${m.count}`}
+                        </div>
+                      ))}
+                    </>
+                  ),
+                }),
                 Lockfile: (
                   <>
                     {data?.tf_lock_providers?.map((provider) => (
