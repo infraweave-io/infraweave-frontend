@@ -18,6 +18,11 @@ import {
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import type { Deployment } from '../../../types/Deployment';
+import {
+  SegmentedToggle,
+  type SegmentedToggleOption,
+} from '../../../shared/components/SegmentedToggle';
+import { compareVersions, type VersionOrder } from '../../../utils/version';
 import { COUNT_NOUN, type CountNoun, type UsageKind } from './usageContext';
 
 export type VersionDistributionCardProps = {
@@ -38,6 +43,18 @@ type VersionChartRow = {
   version: string;
 } & Record<string, number | string>;
 
+type VersionSortKey = 'version' | 'count';
+
+const SORT_KEY_OPTIONS: readonly SegmentedToggleOption<VersionSortKey>[] = [
+  { value: 'version', label: 'Version' },
+  { value: 'count', label: 'Count' },
+];
+
+const SORT_ORDER_OPTIONS: readonly SegmentedToggleOption<VersionOrder>[] = [
+  { value: 'desc', label: 'Desc' },
+  { value: 'asc', label: 'Asc' },
+];
+
 export const VersionDistributionCard = ({
   kind,
   deployments,
@@ -45,6 +62,8 @@ export const VersionDistributionCard = ({
   countNoun = COUNT_NOUN.standalone,
 }: VersionDistributionCardProps) => {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<VersionSortKey>('version');
+  const [sortOrder, setSortOrder] = useState<VersionOrder>('desc');
 
   const availableStatuses = useMemo(
     () =>
@@ -83,9 +102,13 @@ export const VersionDistributionCard = ({
     }
 
     const chartRegions = Array.from(foundRegions).sort();
-    const filteredStats = Array.from(versionMap.values()).sort(
-      (left, right) => right.total - left.total,
-    );
+    // Count ties fall back to version order so rows never shuffle between renders.
+    const filteredStats = Array.from(versionMap.values()).sort((left, right) => {
+      if (sortKey === 'count' && left.total !== right.total) {
+        return sortOrder === 'asc' ? left.total - right.total : right.total - left.total;
+      }
+      return compareVersions(left.version, right.version, sortOrder);
+    });
     const chartDataset: VersionChartRow[] = filteredStats.map((row) => {
       const chartRow: VersionChartRow = { version: row.version };
       for (const region of chartRegions) chartRow[region] = row.regions[region] ?? 0;
@@ -93,7 +116,7 @@ export const VersionDistributionCard = ({
     });
 
     return { filteredStats, chartRegions, chartDataset };
-  }, [deployments, activeStatuses]);
+  }, [deployments, activeStatuses, sortKey, sortOrder]);
 
   return (
     <Card variant="outlined" sx={{ width: '100%' }}>
@@ -104,7 +127,7 @@ export const VersionDistributionCard = ({
       />
       <CardContent>
         {/* Status filter is card-local so the overview keeps showing failures. */}
-        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
           <Autocomplete
             multiple
             options={availableStatuses}
@@ -119,6 +142,18 @@ export const VersionDistributionCard = ({
               />
             )}
             sx={{ width: 300 }}
+          />
+          <SegmentedToggle<VersionSortKey>
+            value={sortKey}
+            options={SORT_KEY_OPTIONS}
+            onChange={setSortKey}
+            ariaLabel="Sort versions by"
+          />
+          <SegmentedToggle<VersionOrder>
+            value={sortOrder}
+            options={SORT_ORDER_OPTIONS}
+            onChange={setSortOrder}
+            ariaLabel="Sort order"
           />
         </Box>
 
