@@ -22,7 +22,6 @@ import { PieChart } from '@mui/x-charts/PieChart';
 import { useChartStatusColors } from '../../../contexts/ThemeContext';
 import type { Deployment } from '../../../types/Deployment';
 import { isFailedDeployment, statusKind } from '../../../utils/deploymentStatus';
-import type { StatusKind } from '../../../utils/deploymentStatus';
 import { deploymentKey, deploymentLink } from './deploymentViewUtils';
 import { FleetGate } from './FleetStatus';
 import { useFleetDeployments } from './useFleetDeployments';
@@ -52,15 +51,10 @@ export const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
   // chartColors is a per-mode constant, so this only reruns on a theme flip or fleet reload.
   const statusStats = React.useMemo(
     () =>
-      countBy(fleet.deployments, (d) => d.status || 'unknown', capitalise).map((slice) => {
-        const colorByKind: Record<StatusKind, string> = {
-          success: chartColors.success,
-          failed: chartColors.failed,
-          'in-progress': chartColors.inProgress,
-          unknown: chartColors.unknown,
-        };
-        return { ...slice, color: colorByKind[statusKind(slice.id)] };
-      }),
+      countBy(fleet.deployments, (d) => d.status || 'unknown', capitalise).map((slice) => ({
+        ...slice,
+        color: chartColors[statusKind(slice.id)],
+      })),
     [fleet.deployments, chartColors],
   );
 

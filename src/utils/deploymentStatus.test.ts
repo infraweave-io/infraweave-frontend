@@ -18,9 +18,9 @@ describe('statusKind', () => {
 
   it('tells success, progress and the unknown apart', () => {
     expect(statusKind('successful')).toBe('success');
-    expect(statusKind('running')).toBe('in-progress');
-    expect(statusKind('requested')).toBe('in-progress');
-    expect(statusKind('initiated')).toBe('in-progress');
+    expect(statusKind('running')).toBe('running');
+    expect(statusKind('requested')).toBe('running');
+    expect(statusKind('initiated')).toBe('running');
     expect(statusKind('drifted')).toBe('unknown');
     expect(statusKind(undefined)).toBe('unknown');
   });

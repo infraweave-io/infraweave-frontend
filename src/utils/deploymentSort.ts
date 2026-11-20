@@ -64,7 +64,7 @@ export const nextSort = (sort: SortKey[], column: SortColumn, adding: boolean): 
 /** Failures first, then what is still running, then the rest. */
 const STATUS_RANK: Record<StatusKind, number> = {
   failed: 0,
-  'in-progress': 1,
+  running: 1,
   unknown: 2,
   success: 3,
 };

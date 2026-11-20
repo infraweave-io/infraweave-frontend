@@ -6,12 +6,12 @@ import { isFailedDeployment, StatusKind, statusKind } from '../../../utils/deplo
 import { FleetGate } from '../FleetGate';
 
 /** Bar and legend order: the outcome that matters most first. */
-const KINDS: StatusKind[] = ['failed', 'success', 'in-progress', 'unknown'];
+const KINDS: StatusKind[] = ['failed', 'success', 'running', 'unknown'];
 
 const KIND_LABEL: Record<StatusKind, string> = {
   failed: 'Failed',
   success: 'Successful',
-  'in-progress': 'In progress',
+  running: 'In progress',
   unknown: 'Unknown',
 };
 
@@ -33,7 +33,7 @@ export const DeploymentHealthSummary = () => {
     const result: Record<StatusKind, number> = {
       failed: 0,
       success: 0,
-      'in-progress': 0,
+      running: 0,
       unknown: 0,
     };
     for (const d of fleet.deployments) {
@@ -42,13 +42,6 @@ export const DeploymentHealthSummary = () => {
     }
     return result;
   }, [fleet.deployments]);
-
-  const colorByKind: Record<StatusKind, string> = {
-    failed: colors.failed,
-    success: colors.success,
-    'in-progress': colors.inProgress,
-    unknown: colors.unknown,
-  };
 
   const total = fleet.deployments.length;
   const present = KINDS.filter((kind) => counts[kind] > 0);
@@ -101,7 +94,7 @@ export const DeploymentHealthSummary = () => {
                     flexGrow: counts[kind],
                     flexBasis: 0,
                     minWidth: MIN_SEGMENT_PX,
-                    bgcolor: colorByKind[kind],
+                    bgcolor: colors[kind],
                     borderTopLeftRadius: i === 0 ? 4 : 0,
                     borderBottomLeftRadius: i === 0 ? 4 : 0,
                     borderTopRightRadius: i === present.length - 1 ? 4 : 0,
@@ -136,7 +129,7 @@ export const DeploymentHealthSummary = () => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    bgcolor: colorByKind[kind],
+                    bgcolor: colors[kind],
                     flexShrink: 0,
                   }}
                 />
