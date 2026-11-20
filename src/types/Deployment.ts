@@ -59,6 +59,7 @@ export type Deployment = {
 export interface StackModuleUsage extends Deployment {
   usageSource: 'stack';
   stackName: string;
+  stackTrack: string;
   stackVersion: string;
   componentIndex: number;
 }

@@ -30,13 +30,18 @@ async function enableMocking() {
   // return 403; real IDs against MSW won't match any mock).
   const currentMode = USE_MOCKS ? 'mock' : 'real';
   const lastMode = localStorage.getItem('__app_mode__');
-  if (lastMode !== currentMode) {
+  const modeChanged = lastMode !== currentMode;
+  if (modeChanged) {
     localStorage.removeItem('selectedProjectNames');
     localStorage.removeItem('selectedRegions');
     clearProjectCache();
-    clearFleetCache();
     clearResourceNameCache();
     localStorage.setItem('__app_mode__', currentMode);
+  }
+
+  // Mock fixture changes do not change the mode, so refresh the fleet on each mock app start.
+  if (modeChanged || USE_MOCKS) {
+    clearFleetCache();
   }
 
   if (!USE_MOCKS) {

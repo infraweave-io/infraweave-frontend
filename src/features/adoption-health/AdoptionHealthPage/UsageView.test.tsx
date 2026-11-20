@@ -60,7 +60,7 @@ vi.mock('../../modules/detail/ModuleVersions', () => ({
           .filter((deployment) => deployment.module_version === version)
           .map((deployment) => (
             <span key={`${deployment.deployment_id}-${deployment.componentIndex}`}>
-              Parent stack: {deployment.stackName}
+              Parent stack: {deployment.stackName} {deployment.stackVersion}
             </span>
           ))}
       </div>
@@ -129,6 +129,7 @@ const stackUses: StackModuleUsage[] = [
     module_version: '2.0.0',
     usageSource: 'stack',
     stackName: 'web-stack',
+    stackTrack: 'stable',
     stackVersion: '4.0.0',
     componentIndex: 0,
   },
@@ -139,6 +140,7 @@ const stackUses: StackModuleUsage[] = [
     module_version: '2.0.0',
     usageSource: 'stack',
     stackName: 'web-stack',
+    stackTrack: 'stable',
     stackVersion: '4.0.0',
     componentIndex: 1,
   },
@@ -149,6 +151,7 @@ const stackUses: StackModuleUsage[] = [
     module_version: '3.0.0',
     usageSource: 'stack',
     stackName: 'api-stack',
+    stackTrack: 'stable',
     stackVersion: '5.0.0',
     componentIndex: 0,
   },
@@ -222,6 +225,23 @@ describe('Module Usage source modes', () => {
     usageMocks.stackLoading = false;
   });
 
+  it('shows collapsed module-version groups in the selected module table', () => {
+    renderUsage('?module=s3bucket&moduleUsageMode=both');
+
+    const card = screen.getByText('Module versions in deployed stacks').closest('.MuiCard-root');
+    if (!card) throw new Error('Module stack relationship table is missing');
+    const table = within(card as HTMLElement).getByRole('table');
+
+    expect(within(table).queryByText('Module name', { exact: true })).not.toBeInTheDocument();
+    const collapsedVersionGroups = within(table)
+      .getAllByRole('row')
+      .filter((row) => within(row).queryByRole('button', { name: 'Expand' }) !== null);
+    expect(collapsedVersionGroups).toHaveLength(2);
+    expect(collapsedVersionGroups.some((row) => row.textContent?.includes('2.0.0'))).toBe(true);
+    expect(collapsedVersionGroups.some((row) => row.textContent?.includes('3.0.0'))).toBe(true);
+    expect(within(table).queryByText('web-stack')).not.toBeInTheDocument();
+    expect(within(table).queryByText('api-stack')).not.toBeInTheDocument();
+  });
   it.each(['in-stacks', 'both'] as const)(
     'uses the fleet-wide count while stack uses load in %s mode',
     (mode) => {
@@ -306,6 +326,7 @@ describe('Module Usage source modes', () => {
     expect(versionRow('2.0.0')).toBeInTheDocument();
     expect(versionRow('3.0.0')).toBeInTheDocument();
     expect(rankingCount('s3bucket')).toHaveTextContent('4');
+    expect(screen.getByText('Module versions in deployed stacks')).toBeInTheDocument();
     expect(
       screen.getByRole('table', { name: 'modules by number of deployments and uses' }),
     ).toBeInTheDocument();
@@ -315,6 +336,7 @@ describe('Module Usage source modes', () => {
 
     await user.click(screen.getByRole('button', { name: 'Standalone' }));
     expect(screen.getByTestId('search')).not.toHaveTextContent('moduleUsageMode=');
+    expect(screen.queryByText('Module versions in deployed stacks')).not.toBeInTheDocument();
     expect(versionRow('1.0.0')).toBeInTheDocument();
     expect(rankingCount('s3bucket')).toHaveTextContent('1');
     expect(rankingRow('standalone-only')).toBeInTheDocument();
@@ -375,8 +397,8 @@ describe('Module Usage source modes', () => {
 
     await user.click(within(distributionTable()).getByRole('button', { name: '2.0.0' }));
     const dialog = await screen.findByRole('dialog', { name: 'Deployments' });
-    expect(within(dialog).getAllByText('Parent stack: web-stack')).toHaveLength(2);
-    expect(within(dialog).queryByText('Parent stack: api-stack')).not.toBeInTheDocument();
+    expect(within(dialog).getAllByText('Parent stack: web-stack 4.0.0')).toHaveLength(2);
+    expect(within(dialog).queryByText('Parent stack: api-stack 5.0.0')).not.toBeInTheDocument();
   });
 
   it('passes stack uses outside the page account filter to the dialog', async () => {
@@ -386,7 +408,7 @@ describe('Module Usage source modes', () => {
 
     await user.click(within(distributionTable()).getByRole('button', { name: '2.0.0' }));
     const dialog = await screen.findByRole('dialog', { name: 'Deployments' });
-    expect(within(dialog).getByText('Parent stack: api-stack')).toBeInTheDocument();
+    expect(within(dialog).getByText('Parent stack: api-stack 5.0.0')).toBeInTheDocument();
   });
   it('expands stack-contained modules in account and region drilldowns', () => {
     const accountPage = renderBreakdown(

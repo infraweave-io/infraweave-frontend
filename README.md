@@ -98,7 +98,11 @@ Entry point: [src/standalone/index.tsx](src/standalone/index.tsx) — referenced
 
 Open **Adoption & Health → Module Usage** (`/infraweave/adoption-health/module-usage`). The **Source** selector shows standalone module deployments, module uses within deployed stacks, or both. Within-stack status, failures, and drift reflect the parent stack deployment; **About stack metrics** explains this in the app.
 
-If some deployed stack compositions cannot be loaded, a warning inside the results card marks their counts as potentially incomplete. A compact incomplete-counts cue remains visible in a selected overview. Account and region drill-downs label the active source in their filters and overview headings. Counts are worded as deployments, uses, or deployments and uses to match the source; a stack that contains a module twice counts as two uses.
+On the Module Usage page, the **Module versions in deployed stacks** table appears when you select a module. It groups rows by module version and stack. The version groups start collapsed. Expand a version to see its stacks and deployed stack versions. The table shows **Module version**, **Stack**, and **Stack version** by default. Use the **Show/Hide columns** menu to display deployment, account, or region counts. The compact table uses fixed grouping. It appears in every **Source** mode and follows the page's account and region filters.
+
+Choose **Within stacks** or **Both** to include stack uses in the version deployment list. Use the **Parent stacks** filter to narrow that list by stack name and version. Published stack versions without a deployment do not appear.
+
+The module versions table warns if the app cannot load some deployed stack compositions. Some relationships can be missing. Rankings in stack-containing modes also mark their counts as potentially incomplete, and the selected overview keeps a compact cue. Account and region drill-downs label the active source in their filters and overview headings. Counts are worded as deployments, uses, or deployments and uses to match the source; a stack that contains a module twice counts as two uses.
 
 ---
 

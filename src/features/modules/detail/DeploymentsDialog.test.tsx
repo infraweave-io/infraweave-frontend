@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ConfigContext } from '../../../contexts/ConfigContext';
 import type { StackModuleUsage } from '../../../types/Deployment';
@@ -81,8 +81,16 @@ const STACK_MODULE_USE: StackModuleUsage = {
   policy_results: [],
   usageSource: 'stack',
   stackName: 'parent-stack',
+  stackTrack: 'stable',
   stackVersion: '1.0.0',
   componentIndex: 0,
+};
+
+const SECOND_STACK_VERSION_USE: StackModuleUsage = {
+  ...STACK_MODULE_USE,
+  deployment_id: 'stack-deployment-2',
+  job_id: 'job-2',
+  stackVersion: '2.0.0',
 };
 
 describe('DeploymentsDialog', () => {
@@ -169,11 +177,71 @@ describe('DeploymentsDialog', () => {
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Tracks' }));
     fireEvent.click(await screen.findByRole('option', { name: 'stable' }));
 
-    expect(screen.getByText('parent-stack')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Parent stack' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Parent stack version' })).toBeInTheDocument();
+    const row = screen.getByRole('row', { name: /stack-deployment-1/ });
+    expect(within(row).getByRole('cell', { name: 'parent-stack' })).toBeInTheDocument();
+    expect(within(row).getByRole('cell', { name: '1.0.0' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'stack-deployment-1' })).toHaveAttribute(
       'href',
       '/infraweave/deployment/111/us-west-2/prod/stack-deployment-1/overview',
     );
+  });
+
+  it('filters stack uses by parent stack name and version', async () => {
+    const t = setup();
+    render(
+      t.wrap(
+        <DeploymentsDialog
+          open
+          onClose={() => {}}
+          moduleName="mod"
+          version="2.0.0"
+          initialProjectIds={['111']}
+          initialRegions={['us-west-2']}
+          stackModuleDeployments={[STACK_MODULE_USE, SECOND_STACK_VERSION_USE]}
+          includeDirectDeployments={false}
+        />,
+      ),
+    );
+    await t.flush();
+    await t.answer(isProjects, () => json(PROJECTS));
+    await t.answer(isPublishedVersions, () => json([]));
+
+    expect(screen.getByRole('link', { name: 'stack-deployment-1' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'stack-deployment-2' })).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Parent stacks' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'parent-stack 2.0.0' }));
+
+    expect(screen.queryByRole('link', { name: 'stack-deployment-1' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'stack-deployment-2' })).toBeInTheDocument();
+    expect(screen.getByText('Deployments (1 of 2)')).toBeInTheDocument();
+  });
+
+  it('opens with the selected parent stack and version filtered', async () => {
+    const t = setup();
+    render(
+      t.wrap(
+        <DeploymentsDialog
+          open
+          onClose={() => {}}
+          moduleName="mod"
+          version="2.0.0"
+          initialProjectIds={['111']}
+          initialRegions={['us-west-2']}
+          initialParentStack={SECOND_STACK_VERSION_USE}
+          stackModuleDeployments={[STACK_MODULE_USE, SECOND_STACK_VERSION_USE]}
+          includeDirectDeployments={false}
+        />,
+      ),
+    );
+    await t.flush();
+    await t.answer(isProjects, () => json(PROJECTS));
+    await t.answer(isPublishedVersions, () => json([]));
+
+    expect(screen.queryByRole('link', { name: 'stack-deployment-1' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'stack-deployment-2' })).toBeInTheDocument();
   });
 
   it('does not fetch or show direct deployments when only stack uses are wanted', async () => {

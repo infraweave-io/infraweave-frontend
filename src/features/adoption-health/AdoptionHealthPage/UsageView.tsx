@@ -31,6 +31,7 @@ import { FleetGate } from './FleetStatus';
 import { UsageRanking } from './UsageRanking';
 import { UsageOverviewCard } from './UsageOverviewCard';
 import { VersionDistributionCard } from './VersionDistributionCard';
+import { ModuleStackUsageTableCard } from './ModuleStackUsageTableCard';
 import { SegmentedToggle } from '../../../shared/components/SegmentedToggle';
 import { useStackModuleUsage } from './stackModuleUsage';
 
@@ -50,7 +51,7 @@ type SourceDeploymentParams = {
   deployments: Deployment[];
   kind: UsageKind;
   moduleUsageMode: ModuleUsageMode;
-  stackNames: Set<string>;
+  stackCatalogueNames: Set<string>;
   stackUses: Deployment[];
 };
 
@@ -58,21 +59,22 @@ const getSourceDeployments = ({
   deployments,
   kind,
   moduleUsageMode,
-  stackNames,
+  stackCatalogueNames,
   stackUses,
 }: SourceDeploymentParams): Deployment[] => {
   if (kind === 'stack') {
-    return deployments.filter((deployment) => isStackDeployment(deployment, stackNames));
+    return deployments.filter((deployment) => isStackDeployment(deployment, stackCatalogueNames));
   }
   if (moduleUsageMode === 'in-stacks') {
     return stackUses;
   }
 
-  const standalone = deployments.filter((deployment) => !isStackDeployment(deployment, stackNames));
-  if (moduleUsageMode === 'both') {
-    return [...standalone, ...stackUses];
-  }
-  return standalone;
+  const standaloneDeployments = deployments.filter(
+    (deployment) => !isStackDeployment(deployment, stackCatalogueNames),
+  );
+  return moduleUsageMode === 'both'
+    ? [...standaloneDeployments, ...stackUses]
+    : standaloneDeployments;
 };
 
 const getRankingDescription = (kind: UsageKind, moduleUsageMode: ModuleUsageMode) => {
@@ -103,64 +105,79 @@ const useUsageViewData = ({ fleet, kind, context }: UsageViewDataParams) => {
     [context.region, context.account],
   );
 
-  const stackNames = React.useMemo(
+  const stackCatalogueNames = React.useMemo(
     () => new Set(fleet.stackCatalogue.map(moduleName)),
     [fleet.stackCatalogue],
   );
   const stackDeployments = React.useMemo(
-    () => fleet.deployments.filter((deployment) => isStackDeployment(deployment, stackNames)),
-    [fleet.deployments, stackNames],
+    () =>
+      fleet.deployments.filter((deployment) => isStackDeployment(deployment, stackCatalogueNames)),
+    [fleet.deployments, stackCatalogueNames],
   );
-  const includesStackUsage = kind === 'module' && moduleUsageMode !== 'standalone';
-  const stackUsage = useStackModuleUsage(includesStackUsage ? stackDeployments : []);
 
-  const registered = React.useMemo(() => {
+  const includeStackModuleUsage = kind === 'module' && moduleUsageMode !== 'standalone';
+  const loadStackCompositions =
+    kind === 'module' && (includeStackModuleUsage || selectedName !== '');
+  const stackModuleUsage = useStackModuleUsage(loadStackCompositions ? stackDeployments : []);
+
+  const registeredNames = React.useMemo(() => {
     if (kind === 'module' && moduleUsageMode === 'in-stacks') {
       return [];
     }
     const catalogue = kind === 'stack' ? fleet.stackCatalogue : fleet.moduleCatalogue;
     return catalogue.map(moduleName).filter(Boolean);
   }, [kind, moduleUsageMode, fleet.stackCatalogue, fleet.moduleCatalogue]);
-  const kindDeployments = React.useMemo(() => {
-    const source = getSourceDeployments({
+
+  // Choose the source before applying the account and region filters.
+  const visibleDeployments = React.useMemo(() => {
+    const sourceDeployments = getSourceDeployments({
       deployments: fleet.deployments,
       kind,
       moduleUsageMode,
-      stackNames,
-      stackUses: stackUsage.uses,
+      stackCatalogueNames,
+      stackUses: stackModuleUsage.uses,
     });
-    return source.filter((deployment) => matchesFilters(deployment, filters));
-  }, [fleet.deployments, kind, moduleUsageMode, stackNames, stackUsage.uses, filters]);
-  const options = React.useMemo(() => {
+    return sourceDeployments.filter((deployment) => matchesFilters(deployment, filters));
+  }, [
+    fleet.deployments,
+    kind,
+    moduleUsageMode,
+    stackCatalogueNames,
+    stackModuleUsage.uses,
+    filters,
+  ]);
+
+  // Keep registered, deployed, and currently selected names available to the overview.
+  const availableNames = React.useMemo(() => {
     const names = [
-      ...registered,
-      ...kindDeployments.map((deployment) => deployment.module),
+      ...registeredNames,
+      ...visibleDeployments.map((deployment) => deployment.module),
       selectedName,
     ].filter(Boolean);
     return Array.from(new Set(names)).sort();
-  }, [registered, kindDeployments, selectedName]);
+  }, [registeredNames, visibleDeployments, selectedName]);
   const selectedDeployments = React.useMemo(
     () =>
       selectedName
-        ? kindDeployments.filter((deployment) => deployment.module === selectedName)
+        ? visibleDeployments.filter((deployment) => deployment.module === selectedName)
         : [],
-    [kindDeployments, selectedName],
+    [visibleDeployments, selectedName],
   );
 
   return {
     countNoun: COUNT_NOUN[kind === 'module' ? moduleUsageMode : 'standalone'],
     filters,
     includeDirectDeployments: kind !== 'module' || moduleUsageMode !== 'in-stacks',
-    includesStackUsage,
-    kindDeployments,
-    loadingStackUsage: includesStackUsage && stackUsage.loading,
+    includeStackModuleUsage,
+    visibleDeployments,
+    stackModuleUsageLoading: includeStackModuleUsage && stackModuleUsage.loading,
     moduleUsageMode,
-    options,
-    registered,
+    availableNames,
+    registeredNames,
     selectedDeployments,
     selectedName,
-    stackDataIncomplete: includesStackUsage && stackUsage.incomplete,
-    stackUsage,
+    stackModuleUsageIncomplete: includeStackModuleUsage && stackModuleUsage.incomplete,
+    stackModuleUsage,
   };
 };
 
@@ -174,16 +191,16 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
     countNoun,
     filters,
     includeDirectDeployments,
-    includesStackUsage,
-    kindDeployments,
-    loadingStackUsage,
+    includeStackModuleUsage,
+    visibleDeployments,
+    stackModuleUsageLoading,
     moduleUsageMode,
-    options,
-    registered,
+    availableNames,
+    registeredNames,
     selectedDeployments,
     selectedName,
-    stackDataIncomplete,
-    stackUsage,
+    stackModuleUsageIncomplete,
+    stackModuleUsage,
   } = useUsageViewData({ fleet, kind, context });
 
   const overviewRef = React.useRef<HTMLDivElement>(null);
@@ -205,10 +222,10 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
     scrollToOverview,
   );
 
-  const fleetScope = loadingStackUsage
+  const fleetScope = stackModuleUsageLoading
     ? undefined
     : {
-        deployments: kindDeployments,
+        deployments: visibleDeployments,
         noun: {
           singular: `${kind} ${countNoun.singular}`,
           plural: `${kind} ${countNoun.plural}`,
@@ -263,19 +280,19 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
               <Typography variant="body1" paragraph>
                 {getRankingDescription(kind, moduleUsageMode)}
               </Typography>
-              {stackDataIncomplete && (
+              {stackModuleUsageIncomplete && (
                 <Alert severity="warning" role="status" sx={{ mb: 2 }}>
                   Some deployed stack compositions could not be loaded, so within-stack module usage
                   may be incomplete.
                 </Alert>
               )}
-              {loadingStackUsage ? (
+              {stackModuleUsageLoading ? (
                 <LinearProgress aria-label="Loading deployed stack compositions" />
               ) : (
                 <UsageRanking
                   kind={kind}
-                  deployments={kindDeployments}
-                  registered={registered}
+                  deployments={visibleDeployments}
+                  registered={registeredNames}
                   loading={fleet.loadingCatalog}
                   selected={selectedName}
                   onSelect={selectFromRanking}
@@ -285,16 +302,16 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
             </CardContent>
           </Card>
 
-          {!loadingStackUsage && (
+          {!stackModuleUsageLoading && (
             <UsageOverviewCard
               kind={kind}
               selectedName={selectedName}
-              options={options}
+              options={availableNames}
               deployments={selectedDeployments}
               projectNames={fleet.projectNames}
               filters={filters}
               moduleUsageMode={kind === 'module' ? moduleUsageMode : undefined}
-              stackDataIncomplete={stackDataIncomplete}
+              stackDataIncomplete={stackModuleUsageIncomplete}
               overviewRef={overviewRef}
               onSelectName={setSelectedName}
               onVersionClick={handleVersionClick}
@@ -302,7 +319,7 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
             />
           )}
 
-          {selectedName && !loadingStackUsage && (
+          {selectedName && !stackModuleUsageLoading && (
             <VersionDistributionCard
               key={kind === 'module' ? `${selectedName}:${moduleUsageMode}` : selectedName}
               kind={kind}
@@ -312,8 +329,19 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
             />
           )}
 
+          {includeStackModuleUsage && selectedName && (
+            <ModuleStackUsageTableCard
+              key={selectedName}
+              selectedModuleName={selectedName}
+              uses={stackModuleUsage.uses}
+              filters={filters}
+              loading={stackModuleUsage.loading}
+              incomplete={stackModuleUsage.incomplete}
+            />
+          )}
+
           {/* The dialog is shared by version links from both cards. */}
-          {openDeployments && selectedName && !loadingStackUsage && (
+          {openDeployments && selectedName && !stackModuleUsageLoading && (
             <DeploymentsDialog
               open={openDeployments}
               onClose={() => setOpenDeployments(false)}
@@ -326,8 +354,8 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
               // Unfiltered by the page's account and region: the dialog narrows them itself and
               // lets the user widen its selection.
               stackModuleDeployments={
-                includesStackUsage
-                  ? stackUsage.uses.filter((use) => use.module === selectedName)
+                includeStackModuleUsage
+                  ? stackModuleUsage.uses.filter((use) => use.module === selectedName)
                   : []
               }
               includeDirectDeployments={includeDirectDeployments}

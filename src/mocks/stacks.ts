@@ -216,9 +216,9 @@ export const stacks = [
         },
         {
           module: 's3bucket',
-          s3_key: 's3bucket/s3bucket-0.0.36-dev+test.6.zip',
-          version: '0.0.36-dev+test.6',
-          track: 'dev',
+          track: 'beta',
+          s3_key: 's3bucket/s3bucket-0.0.36-beta+test.3.zip',
+          version: '0.0.36-beta+test.3',
         },
       ],
     },

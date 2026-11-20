@@ -99,7 +99,7 @@ const UI_FONT = [
  * Surface ramp. Light mode separates chrome (white) from canvas (grey) so cards
  * read as raised without needing shadows; dark mode inverts that relationship.
  */
-const surfaces = {
+export const surfaces = {
   light: {
     canvas: '#f6f7f9',
     paper: '#ffffff',
