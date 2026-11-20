@@ -87,6 +87,11 @@ export const handlers = [
     '/api/v1/deployment/123808927999/us-west-2/playground%2Finfraweave_cli/s3bucket%2Fmy-s3bucket22',
     () => HttpResponse.json(deployments_123808927999_us_west_2[1]),
   ),
+  ...createHandler(
+    'get',
+    '/api/v1/deployment/123808927998/eu-central-1/staging/website_runner_1',
+    () => HttpResponse.json(deployments_123808927998_eu_central_1[1]),
+  ),
 
   // ============= LOGS =============
   ...createHandler('get', '/api/v1/logs/:project/:region/:jobId', ({ request }) => {

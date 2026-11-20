@@ -175,6 +175,7 @@ export const useStackModuleUsage = (stackDeployments: Deployment[]): StackModule
             module_track: component.track || '',
             usageSource: 'stack',
             stackName: deployment.module,
+            stackTrack: deployment.module_track,
             stackVersion: deployment.module_version,
             componentIndex,
           });

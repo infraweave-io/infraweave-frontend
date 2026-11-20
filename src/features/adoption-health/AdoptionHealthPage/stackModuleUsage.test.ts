@@ -128,6 +128,7 @@ describe('useStackModuleUsage', () => {
       module_type: 'module',
       usageSource: 'stack',
       stackName: 'bucketcollection',
+      stackTrack: 'dev',
       stackVersion: bucketCollection.version,
     });
     expect(result.current.uses[2]).toMatchObject({

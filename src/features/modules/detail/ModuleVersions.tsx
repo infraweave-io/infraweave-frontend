@@ -54,6 +54,9 @@ const NO_VERSIONS: Module[] = [];
 /** Shared empty default for optional parent-stack module rows. */
 const NO_STACK_MODULE_DEPLOYMENTS: StackModuleUsage[] = [];
 
+const parentStackLabel = (usage: Pick<StackModuleUsage, 'stackName' | 'stackVersion'>): string =>
+  `${usage.stackName} ${usage.stackVersion}`;
+
 type ResourceType = 'module' | 'stack';
 
 /** Display name per resource type; a new type fails to compile until it is labelled. */
@@ -339,6 +342,7 @@ export const DeploymentsDialog = ({
   resourceType = 'module',
   initialProjectIds,
   initialRegions,
+  initialParentStack,
   stackModuleDeployments = NO_STACK_MODULE_DEPLOYMENTS,
   includeDirectDeployments = true,
   rowLabel = 'Deployments',
@@ -352,6 +356,8 @@ export const DeploymentsDialog = ({
   /** Starting selection when opened from a narrowed view. Omitted, everything is selected. */
   initialProjectIds?: string[];
   initialRegions?: string[];
+  /** Parent stack selected from a module-to-stack relationship diagram. */
+  initialParentStack?: Pick<StackModuleUsage, 'stackName' | 'stackVersion'>;
   /** Child-module uses expanded from deployed parent stacks. */
   stackModuleDeployments?: StackModuleUsage[];
   /** False when only stack uses are wanted, so the module's own deployments are not fetched. */
@@ -361,6 +367,7 @@ export const DeploymentsDialog = ({
 }) => {
   const config = useConfig();
   const rowsLabel = rowLabel.toLowerCase();
+  const initialParentStackLabel = initialParentStack ? parentStackLabel(initialParentStack) : '';
   const [projects, setProjects] = useState<any[]>([]);
   const [publishedVersions, setPublishedVersions] = useState<Module[]>([]);
   const [availableRegions, setAvailableRegions] = useState<string[]>([]);
@@ -368,6 +375,9 @@ export const DeploymentsDialog = ({
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
+  const [selectedParentStacks, setSelectedParentStacks] = useState<string[]>(
+    initialParentStackLabel ? [initialParentStackLabel] : [],
+  );
   const [allDeployments, setAllDeployments] = useState<Deployment[]>([]);
   const [incomplete, setIncomplete] = useState<IncompleteReason | undefined>(undefined);
   // Separate, so the deployments effect settling on an empty selection before the projects
@@ -384,6 +394,10 @@ export const DeploymentsDialog = ({
       setSelectedVersions([]);
     }
   }, [open, version]);
+
+  React.useEffect(() => {
+    setSelectedParentStacks(open && initialParentStackLabel ? [initialParentStackLabel] : []);
+  }, [open, moduleName, initialParentStackLabel]);
 
   // The filters should offer every published version, not only deployed ones. knownVersions
   // is limited to one track and the caller's dev000/deprecated toggles, so fetch all tracks.
@@ -449,6 +463,11 @@ export const DeploymentsDialog = ({
       .map(addPublishedTrack);
     return [...directDeployments, ...selectedStackDeployments];
   }, [allDeployments, allVersions, stackModuleDeployments, selectedProjectIds, selectedRegions]);
+
+  const uniqueParentStacks = React.useMemo(
+    () => Array.from(new Set(stackModuleDeployments.map(parentStackLabel))).sort(),
+    [stackModuleDeployments],
+  );
 
   // By value, so a caller passing a fresh array each render does not refetch the projects.
   // Undefined when not given, which is not the same as given and empty.
@@ -554,7 +573,7 @@ export const DeploymentsDialog = ({
     return () => controller.abort();
   }, [open, includeDirectDeployments, selectedProjectIds, selectedRegions, moduleName, config]);
 
-  // Filter deployments locally when version selection changes or deployments update.
+  // Filter deployments locally when version, track, or parent-stack selection changes.
   const deployments = React.useMemo(() => {
     let filtered = trackedDeployments;
 
@@ -566,8 +585,14 @@ export const DeploymentsDialog = ({
       filtered = filtered.filter((d) => selectedVersions.includes(d.module_version || ''));
     }
 
+    if (selectedParentStacks.length > 0) {
+      filtered = filtered.filter(
+        (d) => isStackModuleUsage(d) && selectedParentStacks.includes(parentStackLabel(d)),
+      );
+    }
+
     return filtered;
-  }, [trackedDeployments, selectedVersions, selectedTracks]);
+  }, [trackedDeployments, selectedVersions, selectedTracks, selectedParentStacks]);
 
   const uniqueTracks = React.useMemo(
     () =>
@@ -627,7 +652,12 @@ export const DeploymentsDialog = ({
     { title: 'Account', field: 'account_name' },
     { title: 'Environment', field: 'environment' },
     { title: 'Region', field: 'region' },
-    ...(stackModuleDeployments.length > 0 ? [{ title: 'Parent stack', field: 'stack_name' }] : []),
+    ...(stackModuleDeployments.length > 0
+      ? [
+          { title: 'Parent stack', field: 'stackName' },
+          { title: 'Parent stack version', field: 'stackVersion' },
+        ]
+      : []),
     { title: `${RESOURCE_LABEL[resourceType]} Version`, field: 'module_version' },
     { title: 'Status', field: 'status' },
   ];
@@ -641,7 +671,9 @@ export const DeploymentsDialog = ({
 
       return {
         ...d,
-        ...(isStackModuleUsage(d) ? { stack_name: d.stackName } : {}),
+        ...(isStackModuleUsage(d)
+          ? { stackVersion: <VersionCell version={d.stackVersion} /> }
+          : {}),
         deployment_id: <Link to={deployment_link}>{d.deployment_id}</Link>,
         account_name: project ? project.name : d.project_id,
         module_version: <VersionCell version={d.module_version} />,
@@ -713,6 +745,25 @@ export const DeploymentsDialog = ({
               )}
             />
           </Grid>
+          {uniqueParentStacks.length > 0 && (
+            <Grid size={3}>
+              <Autocomplete
+                multiple
+                options={uniqueParentStacks}
+                value={selectedParentStacks}
+                onChange={(_, newValue) => setSelectedParentStacks(newValue)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Parent stacks"
+                    variant="outlined"
+                    size="small"
+                    helperText="Cleared = All stacks"
+                  />
+                )}
+              />
+            </Grid>
+          )}
           <Grid size={3}>
             <Autocomplete
               multiple
