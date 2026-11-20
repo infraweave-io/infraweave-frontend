@@ -28,6 +28,7 @@ import { DeploymentIdBadge, EnvironmentBadge } from '../../../shared/components/
 import { InputsOutputs } from './InputsOutputs';
 import { RecentEvents } from './Events';
 import { DeploymentCost } from './DeploymentCost';
+import { ResourcesDialog } from './ResourcesDialog';
 import PopoverExample from './PopOver';
 import { useConfig } from '../../../hooks/useConfig';
 
@@ -49,6 +50,7 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
   const [reapplyRequested, setReapplyRequested] = useState(false);
   const [reapplyResult, setReapplyResult] = useState<'success' | 'error' | null>(null);
   const [errorModalOpen, setErrorModalOpen] = useState(false);
+  const [resourcesModalOpen, setResourcesModalOpen] = useState(false);
 
   const statusLower = deployment?.status?.toLowerCase() ?? '';
   const isFailed = statusLower.includes('fail') || statusLower.includes('error');
@@ -168,10 +170,29 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                 [deployment?.module_type as string]: deployment?.module,
                 Version: <Link to={module_link}>{deployment?.module_version}</Link>,
                 Region: deployment?.region,
-                Resources: (
-                  <Typography variant="body2">
-                    {deployment?.tf_resources?.length || 0} resources
-                  </Typography>
+                Resources: deployment?.tf_resources?.length ? (
+                  <Box
+                    component="button"
+                    onClick={() => setResourcesModalOpen(true)}
+                    sx={{
+                      background: 'none',
+                      border: 'none',
+                      p: 0,
+                      cursor: 'pointer',
+                      color: 'primary.main',
+                      font: 'inherit',
+                      '&:hover': { opacity: 0.75 },
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{ color: 'inherit', textDecoration: 'underline' }}
+                    >
+                      {deployment.tf_resources.length} resources
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="body2">0 resources</Typography>
                 ),
                 Status: (
                   <Box display="flex" alignItems="center" gap={0.5}>
@@ -361,6 +382,11 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
           )}
         </DialogContent>
       </Dialog>
+      <ResourcesDialog
+        open={resourcesModalOpen}
+        onClose={() => setResourcesModalOpen(false)}
+        resources={deployment?.tf_resources ?? []}
+      />
     </>
   );
 };
