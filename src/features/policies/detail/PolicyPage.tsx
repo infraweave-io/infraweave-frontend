@@ -18,6 +18,7 @@ import {
 import { Policy } from '../../../types/Policy';
 import { useParams } from 'react-router-dom';
 import { useAsync } from '../../../hooks/useAsync';
+import { formatDateTime } from '../../../utils/format';
 import { useNavigate } from 'react-router-dom';
 
 export const PolicyPage = () => {
@@ -71,7 +72,7 @@ export const PolicyPage = () => {
                     'Policy Version': value?.version,
                     Environment: value?.environment,
                     Reference: value?.reference,
-                    Created: value?.timestamp,
+                    Created: formatDateTime(value?.timestamp),
                   }}
                 />
               </InfoCard>

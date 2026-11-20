@@ -85,7 +85,8 @@ describe('formatCostPeriod', () => {
   it('labels periods in UTC at the granularity', () => {
     expect(formatCostPeriod('2026-10-01', 'MONTHLY')).toBe('Oct 2026');
     expect(formatCostPeriod('2026-10-13', 'DAILY')).toBe('Oct 13');
-    expect(formatCostPeriod('2026-10-13T05:00:00Z', 'HOURLY')).toBe('Oct 13, 05:00');
+    // ICU separates AM/PM with a narrow no-break space in newer versions.
+    expect(formatCostPeriod('2026-10-13T05:00:00Z', 'HOURLY')).toMatch(/^Oct 13, 05:00\sAM$/);
   });
 });
 
