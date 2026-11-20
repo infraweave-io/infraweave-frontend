@@ -13,6 +13,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { Event } from '../../../types/Event';
+import { formatDateTime } from '../../../utils/format';
 
 const steps = ['Requested', 'Initiated', 'Policy Evaluation', 'Running', 'Finished'];
 
@@ -86,7 +87,7 @@ export default function HorizontalStepperWithError({ events }: { events: Event[]
             if (index === 0) {
               labelProps.optional = (
                 <Typography variant="caption" color="info">
-                  {events.find((event) => event.status === 'requested')?.timestamp}
+                  {formatDateTime(events.find((event) => event.status === 'requested')?.timestamp)}
                 </Typography>
               );
 

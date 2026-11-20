@@ -29,6 +29,14 @@ const MAX_CONCURRENT_EVENT_REQUESTS = 6;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** A `YYYY-MM-DD` UTC day, as the events are grouped, in the viewer's locale. */
+const formatDay = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+
 export const VelocityView = ({ onBack }: { onBack: () => void }) => {
   const config = useConfig();
   const fleet = useFleetDeployments();
@@ -153,7 +161,14 @@ export const VelocityView = ({ onBack }: { onBack: () => void }) => {
             <Box sx={{ width: '100%', height: 400 }}>
               <LineChart
                 dataset={stats}
-                xAxis={[{ scaleType: 'point', dataKey: 'date', label: 'Date' }]}
+                xAxis={[
+                  {
+                    scaleType: 'point',
+                    dataKey: 'date',
+                    label: 'Date',
+                    valueFormatter: formatDay,
+                  },
+                ]}
                 series={[
                   {
                     dataKey: 'success',

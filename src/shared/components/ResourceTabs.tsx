@@ -13,6 +13,7 @@ import { Module } from '../../types/Module';
 import { Deployments } from '../../features/deployments';
 import { SelectedProjectsProvider } from '../../features/root/RootPage/SelectedProjectsContext';
 import EnvFilterPanel from '../../features/root/RootPage/EnvFilterPanel';
+import { formatDateTime } from '../../utils/format';
 
 export interface InformationTabProps {
   data?: Module;
@@ -55,7 +56,7 @@ export const InformationTab: React.FC<InformationTabProps> = ({
                 [resourceLabel]: data?.module,
                 [`${resourceLabel} Version`]: data?.version,
                 Reference: <Link href={data?.reference}>{data?.reference}</Link>,
-                Created: data?.timestamp,
+                Created: formatDateTime(data?.timestamp),
                 'Provider requirements': (
                   <>
                     {data?.tf_required_providers?.map((provider) => (

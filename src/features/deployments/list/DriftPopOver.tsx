@@ -6,6 +6,7 @@ import { CodeSnippet, Progress } from '../../../standalone/components/ComponentA
 import { Box } from '@mui/material';
 import { ChangeRecord } from '../../../types/Log';
 import { useAsyncFn } from '../../../hooks/useAsync';
+import { formatDateTime } from '../../../utils/format';
 
 interface DriftPopoverProps {
   children: React.ReactNode;
@@ -114,7 +115,7 @@ const DriftPopover: React.FC<DriftPopoverProps> = ({ children, deployment }) => 
                   </Typography>
                 </Box>
                 <Typography variant="caption" color="text.secondary">
-                  Checked at {value?.timestamp}
+                  Checked at {formatDateTime(value?.timestamp)}
                 </Typography>
                 <Box>
                   <Typography

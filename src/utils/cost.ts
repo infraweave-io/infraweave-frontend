@@ -40,22 +40,29 @@ export const formatCostTick = (amount: number, unit = 'USD') => {
   }
 };
 
-/** Cost Explorer periods are UTC, so they are labelled in UTC too. */
+/** In the viewer's locale; Cost Explorer periods are UTC, so they are labelled in UTC too. */
 export const formatCostPeriod = (start: string, granularity: CostGranularity) => {
   const date = new Date(start.length === 10 ? `${start}T00:00:00Z` : start);
   if (Number.isNaN(date.getTime())) return start;
   switch (granularity) {
     case 'MONTHLY':
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      return date.toLocaleDateString(undefined, {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
     case 'DAILY':
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      return date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      });
     case 'HOURLY':
-      return date.toLocaleString('en-US', {
+      return date.toLocaleString(undefined, {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hourCycle: 'h23',
         timeZone: 'UTC',
       });
   }

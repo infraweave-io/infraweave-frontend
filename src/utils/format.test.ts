@@ -1,4 +1,4 @@
-import { ago, plural } from './format';
+import { ago, formatDateTime, plural } from './format';
 
 const NOW = new Date('2026-10-09T12:00:00Z').getTime();
 const MINUTE = 60 * 1000;
@@ -31,6 +31,21 @@ describe('ago', () => {
 
   it('defaults to the current time', () => {
     expect(ago(Date.now() - 5 * MINUTE)).toBe('5 min ago');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('formats epochs and ISO timestamps in the local locale', () => {
+    const iso = '2026-10-09T12:00:00.000Z';
+    const local = new Date(iso).toLocaleString();
+    expect(formatDateTime(iso)).toBe(local);
+    expect(formatDateTime(NOW)).toBe(local);
+  });
+
+  it('is empty without a value and passes an unparseable one through', () => {
+    expect(formatDateTime(undefined)).toBe('');
+    expect(formatDateTime('')).toBe('');
+    expect(formatDateTime('not a date')).toBe('not a date');
   });
 });
 

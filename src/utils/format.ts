@@ -14,5 +14,15 @@ export const ago = (epoch: number, now = Date.now()): string => {
   return new Date(epoch).toLocaleDateString();
 };
 
+/**
+ * An epoch (ms) or ISO timestamp as a date and time in the viewer's locale and time zone.
+ * Empty when there is none; an unparseable value is shown as it came.
+ */
+export const formatDateTime = (value?: number | string): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+};
+
 /** `1 module`, `2 modules`. Only for nouns whose plural adds an s. */
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;

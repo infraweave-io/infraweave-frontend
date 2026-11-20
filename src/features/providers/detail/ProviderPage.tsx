@@ -29,6 +29,7 @@ import {
 import { useConfig } from '../../../hooks/useConfig';
 import { useIsStandalone } from '../../../contexts/ConfigContext';
 import { useAsync } from '../../../hooks/useAsync';
+import { formatDateTime } from '../../../utils/format';
 
 const tabs = [{ label: 'Information' }];
 
@@ -133,7 +134,7 @@ export const ProviderPage = () => {
                           {value?.reference}
                         </Link>
                       ),
-                      Created: value?.timestamp,
+                      Created: formatDateTime(value?.timestamp),
                       'Provider requirements': (
                         <>
                           {value?.tf_required_providers?.map((provider) => (
