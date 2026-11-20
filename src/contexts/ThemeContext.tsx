@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 import { createTheme, ThemeProvider as MuiThemeProvider, alpha } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
+import type { StatusKind } from '../utils/deploymentStatus';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -43,15 +44,15 @@ export const CHART_STATUS_COLORS = {
   light: {
     success: '#0284c7',
     failed: '#c2410c',
-    inProgress: '#7c3aed',
+    running: '#7c3aed',
     unknown: '#94a3b8',
-  },
+  } satisfies Record<StatusKind, string>,
   dark: {
     success: '#0d9ddb',
     failed: '#e2670f',
-    inProgress: '#9068f0',
+    running: '#9068f0',
     unknown: '#6b7280',
-  },
+  } satisfies Record<StatusKind, string>,
 } as const;
 
 export const useChartStatusColors = () => {

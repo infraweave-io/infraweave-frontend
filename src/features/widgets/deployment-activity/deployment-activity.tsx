@@ -36,13 +36,13 @@ import { useOnWidgetReload } from '../widgetReload';
 /** A widget is a preview; the full lists live on the Deployments tab. */
 const MAX_ROWS = 10;
 
-type StatusFilter = 'all' | 'success' | 'failed' | 'in-progress';
+type StatusFilter = 'all' | 'success' | 'failed' | 'running';
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All statuses' },
   { value: 'success', label: 'Succeeded' },
   { value: 'failed', label: 'Failed' },
-  { value: 'in-progress', label: 'In progress' },
+  { value: 'running', label: 'In progress' },
 ];
 
 /** Error text counts as failed whatever the status, as everywhere else. */

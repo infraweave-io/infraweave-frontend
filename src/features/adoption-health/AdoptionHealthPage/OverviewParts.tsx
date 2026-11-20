@@ -12,7 +12,7 @@ export const countTone = (count: number, tone: StatusTone): StatusTone =>
 const STATUS_TONE: Record<StatusKind, StatusTone> = {
   success: 'success',
   failed: 'error',
-  'in-progress': 'info',
+  running: 'info',
   unknown: 'neutral',
 };
 

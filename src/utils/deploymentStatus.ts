@@ -5,7 +5,7 @@ const FAILURE_STATUSES = ['failed', 'error', 'failure', 'timed_out', 'cancelled'
 
 const SUCCESS_STATUSES = ['successful', 'success', 'active'];
 
-const IN_PROGRESS_STATUSES = [
+const RUNNING_STATUSES = [
   'requested',
   'initiated',
   'in-progress',
@@ -14,7 +14,7 @@ const IN_PROGRESS_STATUSES = [
   'pending',
 ];
 
-export type StatusKind = 'success' | 'failed' | 'in-progress' | 'unknown';
+export type StatusKind = 'success' | 'failed' | 'running' | 'unknown';
 
 /** Classifies by status alone, for colouring; `isFailedDeployment` also counts error text. */
 export const statusKind = (status: string | undefined): StatusKind => {
@@ -22,7 +22,7 @@ export const statusKind = (status: string | undefined): StatusKind => {
   // The runner suffixes the failing step (failed_init, failed_plan, ...), so match the prefix.
   if (FAILURE_STATUSES.includes(normalised) || normalised.startsWith('failed_')) return 'failed';
   if (SUCCESS_STATUSES.includes(normalised)) return 'success';
-  if (IN_PROGRESS_STATUSES.includes(normalised)) return 'in-progress';
+  if (RUNNING_STATUSES.includes(normalised)) return 'running';
   return 'unknown';
 };
 

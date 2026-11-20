@@ -131,7 +131,7 @@ describe('LatestAppliesList', () => {
       'infraweave.widgetSettings.v1',
       JSON.stringify({
         owner: 'auth-disabled',
-        value: { latest: { modules: ['vpc'], status: 'in-progress' } },
+        value: { latest: { modules: ['vpc'], status: 'running' } },
       }),
     );
     renderWidget(<LatestAppliesList />);
