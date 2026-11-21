@@ -40,6 +40,7 @@ import { Deployment, Project } from '../../../types/Deployment';
 import { Event } from '../../../types/Event';
 import { ChangeRecord } from '../../../types/Log';
 import { DrawerContent } from '../detail/ReadLogsButton';
+import { formatDateTime } from '../../../utils/format';
 
 interface DeploymentWithEvents extends Deployment {
   events?: Event[];
@@ -776,9 +777,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
                           }}
                         >
                           <Typography variant="body2" noWrap sx={{ fontSize: '0.85rem' }}>
-                            {deployment.lastChangeTimestamp
-                              ? new Date(deployment.lastChangeTimestamp).toLocaleString()
-                              : 'N/A'}
+                            {formatDateTime(deployment.lastChangeTimestamp) || 'N/A'}
                           </Typography>
                         </TableCell>
                       </TableRow>
