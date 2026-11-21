@@ -16,7 +16,6 @@ type DashboardView =
   | 'account-usage'
   | 'health'
   | 'issues';
-
 type DashboardCardData = {
   view: DashboardView;
   icon: ReactElement;

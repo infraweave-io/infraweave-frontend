@@ -19,6 +19,7 @@ import { scrollToSection } from './OverviewParts';
 import {
   ContextFilters,
   COUNT_NOUN,
+  DEFAULT_MODULE_USAGE_MODE,
   MODULE_USAGE_MODE_LABEL,
   ModuleUsageSourceHelp,
   matchesFilters,
@@ -36,9 +37,9 @@ import { SegmentedToggle } from '../../../shared/components/SegmentedToggle';
 import { useStackModuleUsage } from './stackModuleUsage';
 
 const MODULE_USAGE_MODE_OPTIONS: readonly { value: ModuleUsageMode; label: string }[] = [
+  { value: 'both', label: MODULE_USAGE_MODE_LABEL.both },
   { value: 'standalone', label: MODULE_USAGE_MODE_LABEL.standalone },
   { value: 'in-stacks', label: MODULE_USAGE_MODE_LABEL['in-stacks'] },
-  { value: 'both', label: MODULE_USAGE_MODE_LABEL.both },
 ];
 
 type UsageViewDataParams = {
@@ -99,7 +100,7 @@ const getRankingDescription = (kind: UsageKind, moduleUsageMode: ModuleUsageMode
 
 const useUsageViewData = ({ fleet, kind, context }: UsageViewDataParams) => {
   const selectedName = context.module ?? '';
-  const moduleUsageMode = context.moduleUsageMode ?? 'standalone';
+  const moduleUsageMode = context.moduleUsageMode ?? DEFAULT_MODULE_USAGE_MODE;
   const filters = React.useMemo(
     () => ({ region: context.region, account: context.account }),
     [context.region, context.account],

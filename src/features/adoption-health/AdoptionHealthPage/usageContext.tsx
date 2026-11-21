@@ -18,6 +18,9 @@ export type UsageKind = 'module' | 'stack';
 
 export type ModuleUsageMode = 'standalone' | 'in-stacks' | 'both';
 
+/** Mode used when the URL has none. The URL omits the query parameter for this mode. */
+export const DEFAULT_MODULE_USAGE_MODE: ModuleUsageMode = 'both';
+
 export type UsageContext = Partial<Record<ContextKey, string>> & {
   kind?: UsageKind;
   moduleUsageMode?: ModuleUsageMode;
@@ -38,7 +41,7 @@ export const usageHref = (view: UsageView, context: UsageContext): string => {
     if (value) params.set(key, value);
     if (key === 'module' && value && context.kind) params.set('kind', context.kind);
   }
-  if (context.moduleUsageMode && context.moduleUsageMode !== 'standalone') {
+  if (context.moduleUsageMode && context.moduleUsageMode !== DEFAULT_MODULE_USAGE_MODE) {
     params.set('moduleUsageMode', context.moduleUsageMode);
   }
   const query = params.toString();
@@ -50,7 +53,7 @@ export const useUsageContext = () => {
   const [params, setParams] = useSearchParams();
   const requestedMode = params.get('moduleUsageMode');
   const context: UsageContext = {
-    moduleUsageMode: isModuleUsageMode(requestedMode) ? requestedMode : 'standalone',
+    moduleUsageMode: isModuleUsageMode(requestedMode) ? requestedMode : DEFAULT_MODULE_USAGE_MODE,
   };
   for (const key of CONTEXT_KEYS) {
     const value = params.get(key);
@@ -81,7 +84,7 @@ export const useUsageContext = () => {
       setParams(
         (current) => {
           const next = new URLSearchParams(current);
-          if (mode === 'standalone') next.delete('moduleUsageMode');
+          if (mode === DEFAULT_MODULE_USAGE_MODE) next.delete('moduleUsageMode');
           else next.set('moduleUsageMode', mode);
           return next;
         },
@@ -184,7 +187,7 @@ export const COUNT_NOUN: Record<ModuleUsageMode, CountNoun> = {
 
 const sourceLabel = (filters: UsageContext): string | undefined =>
   filters.module && filters.kind === 'module'
-    ? MODULE_USAGE_MODE_LABEL[filters.moduleUsageMode ?? 'standalone']
+    ? MODULE_USAGE_MODE_LABEL[filters.moduleUsageMode ?? DEFAULT_MODULE_USAGE_MODE]
     : undefined;
 
 /** Optional explanation for the source selector and module drill-downs. */

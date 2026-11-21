@@ -51,6 +51,7 @@ import { useStackModuleUsage, type StackModuleUsageState } from './stackModuleUs
 import {
   ContextFilters,
   COUNT_NOUN,
+  DEFAULT_MODULE_USAGE_MODE,
   filterSummary,
   matchesFilters,
   StackUsageIncompleteChip,
@@ -602,7 +603,7 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
     const stack = deployment ? isStack(deployment) : stackNames.has(context.module);
     return stack ? 'stack' : 'module';
   }, [context.module, context.kind, fleet.deployments, isStack, stackNames]);
-  const moduleUsageMode = context.moduleUsageMode ?? 'standalone';
+  const moduleUsageMode = context.moduleUsageMode ?? DEFAULT_MODULE_USAGE_MODE;
   const filters = React.useMemo<UsageContext>(
     () => ({
       ...(by === 'region'

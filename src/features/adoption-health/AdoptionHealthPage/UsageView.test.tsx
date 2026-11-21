@@ -270,25 +270,24 @@ describe('Module Usage source modes', () => {
     expect(screen.queryByRole('link', { name: 'eu-west-1' })).not.toBeInTheDocument();
   });
 
-  it('defaults to standalone and switches the ranking, versions, and account drilldown source', async () => {
+  it('defaults to both and switches the ranking, versions, and account drilldown source', async () => {
     const user = userEvent.setup();
     renderUsage();
-    expect(screen.getByText('Source: Standalone')).toBeInTheDocument();
+    expect(screen.getByText('Source: Both')).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: 'Standalone' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: 'Both' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('search')).toHaveTextContent('?module=s3bucket');
+    expect(screen.getByTestId('search')).not.toHaveTextContent('moduleUsageMode=');
     expect(versionRow('1.0.0')).toBeInTheDocument();
-    expect(rankingCount('s3bucket')).toHaveTextContent('1');
-    expect(rankingRow('standalone-only')).toBeInTheDocument();
-    await user.click(screen.getByRole('combobox', { name: 'Select Module' }));
-    expect(await screen.findByRole('option', { name: 'standalone-only' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
+    expect(versionRow('2.0.0')).toBeInTheDocument();
+    expect(versionRow('3.0.0')).toBeInTheDocument();
+    expect(rankingCount('s3bucket')).toHaveTextContent('4');
     expect(
-      within(distributionTable()).queryByRole('row', { name: /2\.0\.0|3\.0\.0/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole('table', { name: 'modules by number of deployments and uses' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/^5 module deployments and uses across 2 accounts/),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Within stacks' }));
 
@@ -319,30 +318,26 @@ describe('Module Usage source modes', () => {
       '/infraweave/adoption-health/account-usage?module=s3bucket&kind=module&account=111&moduleUsageMode=in-stacks',
     );
 
-    await user.click(screen.getByRole('button', { name: 'Both' }));
-
-    expect(screen.getByTestId('search')).toHaveTextContent('moduleUsageMode=both');
-    expect(versionRow('1.0.0')).toBeInTheDocument();
-    expect(versionRow('2.0.0')).toBeInTheDocument();
-    expect(versionRow('3.0.0')).toBeInTheDocument();
-    expect(rankingCount('s3bucket')).toHaveTextContent('4');
-    expect(screen.getByText('Module versions in deployed stacks')).toBeInTheDocument();
-    expect(
-      screen.getByRole('table', { name: 'modules by number of deployments and uses' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/^5 module deployments and uses across 2 accounts/),
-    ).toBeInTheDocument();
-
     await user.click(screen.getByRole('button', { name: 'Standalone' }));
-    expect(screen.getByTestId('search')).not.toHaveTextContent('moduleUsageMode=');
+
+    expect(screen.getByTestId('search')).toHaveTextContent('moduleUsageMode=standalone');
+    expect(screen.getByText('Source: Standalone')).toBeInTheDocument();
     expect(screen.queryByText('Module versions in deployed stacks')).not.toBeInTheDocument();
     expect(versionRow('1.0.0')).toBeInTheDocument();
     expect(rankingCount('s3bucket')).toHaveTextContent('1');
     expect(rankingRow('standalone-only')).toBeInTheDocument();
+    await user.click(screen.getByRole('combobox', { name: 'Select Module' }));
+    expect(await screen.findByRole('option', { name: 'standalone-only' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
     expect(
       within(distributionTable()).queryByRole('row', { name: /2\.0\.0|3\.0\.0/ }),
     ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Both' }));
+    expect(screen.getByTestId('search')).not.toHaveTextContent('moduleUsageMode=');
+    expect(screen.getByText('Source: Both')).toBeInTheDocument();
+    expect(rankingCount('s3bucket')).toHaveTextContent('4');
+    expect(screen.getByText('Module versions in deployed stacks')).toBeInTheDocument();
   }, 10_000);
 
   it('reveals parent-stack semantics on source help without changing the selected mode', async () => {
@@ -354,16 +349,13 @@ describe('Module Usage source modes', () => {
 
     await user.hover(help);
     expect(await screen.findByRole('tooltip')).toHaveTextContent(/parent stack deployment/i);
-    expect(screen.getByRole('button', { name: 'Standalone' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: 'Both' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps partial-results warnings attached to stack-containing modes', async () => {
     const user = userEvent.setup();
     usageMocks.stackIncomplete = true;
-    renderUsage();
+    renderUsage('?module=s3bucket&moduleUsageMode=standalone');
 
     expect(screen.queryByText(/usage may be incomplete/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Within stacks' }));

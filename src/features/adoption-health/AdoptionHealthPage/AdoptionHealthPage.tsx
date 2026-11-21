@@ -5,6 +5,7 @@ import { BreakdownView } from './BreakdownView';
 import { DeploymentHealthView } from './DeploymentHealthView';
 import { ModuleIssuesView } from './ModuleIssuesView';
 import { UsageView } from './UsageView';
+import { ModuleStackUsageExplorerPage } from './ModuleStackUsageExplorerPage';
 import { VelocityView } from './VelocityView';
 
 const ADOPTION_HEALTH_PATH = '/infraweave/adoption-health';
@@ -30,6 +31,8 @@ export const AdoptionHealthPage = () => {
       return <UsageView key="module" kind="module" onBack={handleBack} />;
     case 'stack-usage':
       return <UsageView key="stack" kind="stack" onBack={handleBack} />;
+    case 'deployment-explorer':
+      return <ModuleStackUsageExplorerPage onBack={handleBack} />;
     case 'region-usage':
       return <BreakdownView key="region" by="region" onBack={handleBack} />;
     case 'account-usage':
