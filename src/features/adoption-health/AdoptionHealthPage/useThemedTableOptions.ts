@@ -1,15 +1,24 @@
 import type { MRT_DensityState, MRT_RowData, MRT_TableOptions } from 'material-react-table';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { surfaces } from '../../../contexts/ThemeContext';
 import { TABLE_FRAME_RADIUS } from '../../../standalone/components/ComponentAdapter';
 import { renderGroupingSummary } from './GroupingSummary';
 
-/** Vertical cell padding per density. `compact` matches the shared `Table` in the details views. */
+/**
+ * Vertical cell padding per density. `compact` matches the theme's `sizeSmall` table cell, the
+ * densest the shared `Table` uses.
+ */
 const CELL_PADDING_Y: Record<MRT_DensityState, string> = {
-  compact: '10px',
-  comfortable: '14px',
-  spacious: '20px',
+  compact: '6px',
+  comfortable: '12px',
+  spacious: '18px',
 };
+
+/** MRT's expand toggle is 28px tall, which alone would set the row height of a grouped row. */
+const EXPAND_BUTTON_SIZE = 20;
+
+/** Width of the bar marking the left edge of a grouped row. */
+const GROUP_BAR_WIDTH = 3;
 
 /**
  * Makes a Material React Table look like the shared `Table` used by the details views:
@@ -23,6 +32,12 @@ export const useThemedTableOptions = <TData extends MRT_RowData>({
 }: { groupingRemovable?: boolean } = {}): Partial<MRT_TableOptions<TData>> => {
   const { palette } = useTheme();
   const { subtle } = surfaces[palette.mode];
+  const primary = palette.primary.main;
+  // Group rows step from strongest (outermost) to lightest; a leaf row has no bar.
+  const groupStyle = [
+    { bar: primary, fontWeight: 600 },
+    { bar: alpha(primary, 0.45), fontWeight: 500 },
+  ];
 
   return {
     // MRT paints rows with the page canvas by default, which reads as grey inside a white card.
@@ -73,6 +88,19 @@ export const useThemedTableOptions = <TData extends MRT_RowData>({
           overflow: 'visible',
         },
       },
+    },
+    muiExpandButtonProps: {
+      sx: { height: EXPAND_BUTTON_SIZE, width: EXPAND_BUTTON_SIZE },
+    },
+    muiTableBodyRowProps: ({ row }) => {
+      if (!row.getIsGrouped()) return {};
+      const { bar, fontWeight } = groupStyle[Math.min(row.depth, groupStyle.length - 1)];
+      return {
+        sx: {
+          '& td': { fontWeight },
+          '& td:first-of-type': { boxShadow: `inset ${GROUP_BAR_WIDTH}px 0 0 ${bar}` },
+        },
+      };
     },
     muiTableBodyCellProps: ({ table }) => ({
       sx: {
