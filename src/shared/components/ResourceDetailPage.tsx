@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { Module, ModuleExample } from '../../types/Module';
 import { ResourcePage } from './ResourcePage';
 import { InformationTab, UsageTab } from './ResourceTabs';
@@ -18,19 +18,22 @@ import {
   Collapse,
   Menu,
   MenuItem,
+  Tooltip,
+  Divider,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
 import CodeIcon from '@mui/icons-material/Code';
-import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import {
   InfoCard,
   CodeSnippet,
   MarkdownContent,
 } from '../../standalone/components/ComponentAdapter';
-import { ModuleVersions, DeploymentsDialog } from '../../features/modules/detail/ModuleVersions';
+import { ModuleVersions } from '../../features/modules/detail/ModuleVersions';
 import { SelectedProjectProvider } from './DeploySelectedContext';
 import { VariableProvider } from './DeployVariableContext';
 import DeployResourceDialog from './DeployResourceDialog';
@@ -39,6 +42,7 @@ import { useAvailableTracks } from '../../hooks/useAvailableTracks';
 import { useZipBrowser } from '../../hooks/useZipBrowser';
 import { ZipBrowser } from './ZipBrowser';
 import { CompareVersionsDialog } from '../../features/modules/detail/CompareVersionsDialog';
+import { usageHref } from '../../features/adoption-health/AdoptionHealthPage/usageContext';
 import { toYamlString } from '../../utils/yaml';
 const DeploymentVariableSettings = React.lazy(() => import('./DeployVariableSettings'));
 
@@ -81,8 +85,6 @@ const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resource
   const [openCompareDialog, setOpenCompareDialog] = useState(false);
   const [initialCompareVersion, setInitialCompareVersion] = useState<string | undefined>(undefined);
   const [initialCompareTrack, setInitialCompareTrack] = useState<string | undefined>(undefined);
-  const [openDeployments, setOpenDeployments] = useState(false);
-  const [deploymentsVersion, setDeploymentsVersion] = useState('');
   const [showExampleClaim, setShowExampleClaim] = useState(false);
   const [selectedExampleIndex, setSelectedExampleIndex] = useState(0);
   const config = useConfig();
@@ -167,7 +169,9 @@ const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resource
     );
   };
 
-  const headerActions = (data: Module | undefined) => {
+  // Tools for the version on screen. Both stay outlined so "Create" is the one filled button
+  // and reads as the primary action.
+  const versionTools = (data: Module | undefined) => {
     if (!data?.s3_key) return null;
     const examples: ModuleExample[] = data.manifest?.spec?.examples ?? [];
     return (
@@ -183,7 +187,7 @@ const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resource
           </Button>
         )}
         <Button
-          variant="contained"
+          variant="outlined"
           color="primary"
           startIcon={<CodeIcon />}
           onClick={() =>
@@ -192,21 +196,33 @@ const ResourceDetailPageContent: React.FC<ResourceDetailPageProps> = ({ resource
         >
           Browse Artifact
         </Button>
-        {/* Only "Browse Artifact" stays filled: a row of four solid buttons
-            gives the user no read on which action is the primary one. */}
-        <Button
-          variant="outlined"
-          startIcon={<CloudQueueIcon />}
-          onClick={() => {
-            setDeploymentsVersion(data.version);
-            setOpenDeployments(true);
-          }}
-        >
-          Deployments
-        </Button>
       </Box>
     );
   };
+
+  // Ways to see where the resource is used and which versions exist.
+  const exploreActions = () => (
+    <Box display="flex" gap={1}>
+      <Button variant="outlined" onClick={() => setOpenVersionsModal(true)}>
+        Versions
+      </Button>
+      {resourceName && (
+        <Tooltip
+          title={`See where this ${resourceLabel} is deployed, and how its versions are adopted`}
+        >
+          <Button
+            variant="outlined"
+            startIcon={<QueryStatsIcon />}
+            endIcon={<ArrowForwardIcon />}
+            component={RouterLink}
+            to={usageHref(`${resourceType}-usage`, { module: resourceName })}
+          >
+            View {resourceLabel} usage
+          </Button>
+        </Tooltip>
+      )}
+    </Box>
+  );
 
   const renderExampleClaimYaml = (value: Module): string => {
     const example = value.manifest.spec.examples?.[selectedExampleIndex];
@@ -458,15 +474,24 @@ spec:
         resourceType={resourceType}
         renderTabContent={renderTabContent}
         tabs={tabs}
-        headerActions={(data) => (
-          <Box display="flex" gap={1}>
-            {headerActions(data)}
-            <Button variant="outlined" onClick={() => setOpenVersionsModal(true)}>
-              Versions
-            </Button>
-            {deployAction(data)}
-          </Box>
-        )}
+        headerActions={(data) => {
+          const create = deployAction(data);
+          return (
+            <Box
+              display="flex"
+              gap={3}
+              alignItems="center"
+              flexWrap="wrap"
+              justifyContent="flex-end"
+            >
+              {exploreActions()}
+              {data?.s3_key && <Divider orientation="vertical" flexItem />}
+              {versionTools(data)}
+              {create && <Divider orientation="vertical" flexItem />}
+              {create}
+            </Box>
+          );
+        }}
       />
 
       {/* Artifact ZIP browser dialog */}
@@ -555,18 +580,6 @@ spec:
           />
         </DialogContent>
       </Dialog>
-
-      {/* A stack claim is recorded as a deployment under the stack's name, so this covers both.
-          Mounted per opening, so filters, rows and errors do not carry over to the next one. */}
-      {openDeployments && (
-        <DeploymentsDialog
-          open={openDeployments}
-          onClose={() => setOpenDeployments(false)}
-          moduleName={resourceName || ''}
-          version={deploymentsVersion}
-          resourceType={resourceType}
-        />
-      )}
     </>
   );
 };

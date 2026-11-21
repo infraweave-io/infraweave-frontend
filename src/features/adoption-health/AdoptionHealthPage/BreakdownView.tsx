@@ -10,11 +10,9 @@ import {
   Chip,
   Grid,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -22,7 +20,10 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { ResponseErrorPanel } from '../../../standalone/components/ComponentAdapter';
+import {
+  FramedTableContainer,
+  ResponseErrorPanel,
+} from '../../../standalone/components/ComponentAdapter';
 import { StatusChip } from '../../../shared/components/StatusChip';
 import { Deployment } from '../../../types/Deployment';
 import { FleetGate } from './FleetStatus';
@@ -160,7 +161,7 @@ const GroupRanking = ({
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         {inUse} of {rows.length} {spec.noun}s have active {countNoun.plural}.
       </Typography>
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+      <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
         <Table
           size="small"
           stickyHeader
@@ -227,7 +228,7 @@ const GroupRanking = ({
             })}
           </TableBody>
         </Table>
-      </TableContainer>
+      </FramedTableContainer>
     </Box>
   );
 };
@@ -316,7 +317,7 @@ const GroupOverview = ({
           <Typography variant="h6" gutterBottom>
             Modules and stacks
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+          <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
             <Table size="small" stickyHeader aria-label={`Modules and stacks in ${label}`}>
               <TableHead>
                 <TableRow>
@@ -356,14 +357,14 @@ const GroupOverview = ({
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+          </FramedTableContainer>
         </Grid>
 
         <Grid size={{ xs: 12, xl: 5 }}>
           <Typography variant="h6" gutterBottom>
             {spec.otherLabel}
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+          <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
             <Table size="small" stickyHeader aria-label={`${spec.otherLabel} in ${label}`}>
               <TableHead>
                 <TableRow>
@@ -408,7 +409,7 @@ const GroupOverview = ({
                 })}
               </TableBody>
             </Table>
-          </TableContainer>
+          </FramedTableContainer>
         </Grid>
       </Grid>
     </Box>

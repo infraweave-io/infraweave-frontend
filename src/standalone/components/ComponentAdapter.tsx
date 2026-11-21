@@ -882,6 +882,28 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
   );
 };
 
+/** Radius multiplier (x theme `shape.borderRadius`) shared by every framed table. */
+export const TABLE_FRAME_RADIUS = 2;
+
+/**
+ * The border and rounded corners every data table wears. Header, cell and row
+ * styling come from the theme's MuiTableCell/MuiTableRow overrides, so wrapping
+ * a MUI `Table` in this is all a table needs to match the rest of the app.
+ * `maxHeight` makes the frame scroll, which `stickyHeader` pins the header to.
+ */
+export const FramedTableContainer: React.FC<{
+  maxHeight?: number | string;
+  children: ReactNode;
+}> = ({ maxHeight, children }) => (
+  <TableContainer
+    component={Paper}
+    variant="outlined"
+    sx={{ borderRadius: TABLE_FRAME_RADIUS, overflowX: 'auto', maxHeight }}
+  >
+    {children}
+  </TableContainer>
+);
+
 // Table - Standalone implementation
 export interface TableColumn<T = any> {
   title: string;
@@ -1017,7 +1039,13 @@ export function Table<T = any>({
     return (
       <Paper
         variant="outlined"
-        sx={{ p: 4, textAlign: 'center', color: 'text.secondary', fontSize: '0.8125rem' }}
+        sx={{
+          borderRadius: TABLE_FRAME_RADIUS,
+          p: 4,
+          textAlign: 'center',
+          color: 'text.secondary',
+          fontSize: '0.8125rem',
+        }}
       >
         {emptyContent}
       </Paper>
@@ -1025,11 +1053,7 @@ export function Table<T = any>({
   }
 
   return (
-    <TableContainer
-      component={Paper}
-      variant="outlined"
-      sx={{ borderRadius: 2, overflowX: 'auto' }}
-    >
+    <FramedTableContainer>
       {(title || searchable) && (
         <Box
           sx={{
@@ -1171,7 +1195,7 @@ export function Table<T = any>({
           }}
         />
       )}
-    </TableContainer>
+    </FramedTableContainer>
   );
 }
 

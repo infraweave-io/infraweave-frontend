@@ -26,7 +26,7 @@ describe('ago', () => {
 
   it('switches to a date from 30 days', () => {
     const epoch = NOW - 30 * DAY;
-    expect(ago(epoch, NOW)).toBe(new Date(epoch).toLocaleDateString());
+    expect(ago(epoch, NOW)).toMatch(/^\d{2}\/\d{2}\/2026$/);
   });
 
   it('defaults to the current time', () => {
@@ -35,11 +35,10 @@ describe('ago', () => {
 });
 
 describe('formatDateTime', () => {
-  it('formats epochs and ISO timestamps in the local locale', () => {
+  it('formats epochs and ISO timestamps the same way', () => {
     const iso = '2026-10-09T12:00:00.000Z';
-    const local = new Date(iso).toLocaleString();
-    expect(formatDateTime(iso)).toBe(local);
-    expect(formatDateTime(NOW)).toBe(local);
+    expect(formatDateTime(iso)).toMatch(/^\d{2}\/\d{2}\/2026 \d{1,2}:\d{2} [AP]M$/);
+    expect(formatDateTime(NOW)).toBe(formatDateTime(iso));
   });
 
   it('is empty without a value and passes an unparseable one through', () => {

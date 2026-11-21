@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
-import { Link } from '../../standalone/components/ComponentAdapter';
+import { FramedTableContainer, Link } from '../../standalone/components/ComponentAdapter';
 import { MONO_FONT } from '../../contexts/ThemeContext';
 import { formatCost } from '../../utils/cost';
 
@@ -35,7 +35,7 @@ export const CostShareTable = ({
   maxHeight?: number;
   ariaLabel: string;
 }) => (
-  <Box sx={{ maxHeight, overflow: 'auto' }}>
+  <FramedTableContainer maxHeight={maxHeight}>
     <Table size="small" stickyHeader aria-label={ariaLabel}>
       <TableHead>
         <TableRow>
@@ -94,7 +94,7 @@ export const CostShareTable = ({
         ))}
       </TableBody>
     </Table>
-  </Box>
+  </FramedTableContainer>
 );
 
 /** A resource id is usually an ARN; the part after the service is what tells resources apart. */

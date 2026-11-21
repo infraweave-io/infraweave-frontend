@@ -133,22 +133,21 @@ describe('ModuleStackUsageTableCard', () => {
     expect(within(table).queryByText('api-stack')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Go to next page' })).not.toBeInTheDocument();
   });
-  it('shows the requested columns by default and can reveal deployment counts', async () => {
+  it('shows deployments by default and can reveal account and region counts', async () => {
     const user = userEvent.setup();
-    const { container } = renderCard({ selectedModuleName: 'network-vpc' });
+    renderCard({ selectedModuleName: 'network-vpc' });
 
     const table = getTable();
     expect(within(table).getByText('Module version', { exact: true })).toBeInTheDocument();
     expect(within(table).getByText('Stack', { exact: true })).toBeInTheDocument();
     expect(within(table).getByText('Stack version', { exact: true })).toBeInTheDocument();
-    expect(within(table).queryByText('Deployments', { exact: true })).not.toBeInTheDocument();
+    expect(within(table).getByText('Deployments', { exact: true })).toBeInTheDocument();
     expect(within(table).queryByText('Accounts', { exact: true })).not.toBeInTheDocument();
     expect(within(table).queryByText('Regions', { exact: true })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /show\/hide columns/i }));
-    const menu = screen.getByRole('menu');
-    await user.click(within(menu).getByRole('switch', { name: /Toggle visibility Deployments/ }));
-    expect(container.querySelector('thead')?.textContent).toContain('Deployments');
+    await showColumns(user, ['Accounts', 'Regions']);
+    expect(within(getTable()).getByText('Accounts', { exact: true })).toBeInTheDocument();
+    expect(within(getTable()).getByText('Regions', { exact: true })).toBeInTheDocument();
   });
 
   it('does not expose controls that can change the selected-module grouping', () => {
@@ -169,7 +168,7 @@ describe('ModuleStackUsageTableCard', () => {
   it('counts distinct deployment, account, and region keys across grouped relationships', async () => {
     const user = userEvent.setup();
     renderCard();
-    await showColumns(user, ['Deployments', 'Accounts', 'Regions']);
+    await showColumns(user, ['Accounts', 'Regions']);
 
     const versionGroup = getGroupRow((text) => text.includes('1.0.0'));
     expect(within(versionGroup).getByLabelText('Distinct deployments: 2')).toBeInTheDocument();
@@ -186,7 +185,7 @@ describe('ModuleStackUsageTableCard', () => {
   it('applies page account and region filters to the visible relationships and counts', async () => {
     const user = userEvent.setup();
     const { rerender } = renderCard({ filters: { account: 'account-a' } });
-    await showColumns(user, ['Deployments', 'Accounts', 'Regions']);
+    await showColumns(user, ['Accounts', 'Regions']);
 
     const accountFilteredGroup = getGroupRow((text) => text.includes('1.0.0'));
     expect(
@@ -267,8 +266,6 @@ describe('ModuleStackUsageTableCard', () => {
   it('expands to a stack-version leaf and opens its exact filtered deployments', async () => {
     const user = userEvent.setup();
     renderCard({ filters: { account: 'account-a', region: 'eu-west-1' } });
-    await showColumns(user, ['Deployments']);
-
     await expandGroup(user, (text) => text.includes('1.0.0'));
     await expandGroup(user, (text) => text.includes('web-stack'));
 

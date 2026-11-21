@@ -5,11 +5,9 @@ import {
   Button,
   Grid,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -21,6 +19,7 @@ import {
   InfoCard,
   Link,
   ResponseErrorPanel,
+  FramedTableContainer,
 } from '../../../standalone/components/ComponentAdapter';
 import { useChartStatusColors } from '../../../contexts/ThemeContext';
 import type { Deployment } from '../../../types/Deployment';
@@ -204,7 +203,7 @@ export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
                 <Typography variant="body1" paragraph>
                   Breakdown of failure rates and totals for each module across all projects.
                 </Typography>
-                <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 600 }}>
+                <FramedTableContainer maxHeight={600}>
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
@@ -245,7 +244,7 @@ export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </FramedTableContainer>
               </InfoCard>
             </Grid>
 
@@ -314,7 +313,7 @@ export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
                     {filtering ? 'No active errors match the filters.' : 'No active errors found.'}
                   </Typography>
                 ) : (
-                  <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 800 }}>
+                  <FramedTableContainer maxHeight={800}>
                     <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
@@ -351,7 +350,7 @@ export const ModuleIssuesView = ({ onBack }: { onBack: () => void }) => {
                         ))}
                       </TableBody>
                     </Table>
-                  </TableContainer>
+                  </FramedTableContainer>
                 )}
               </InfoCard>
             </Grid>

@@ -6,17 +6,16 @@ import {
   CardContent,
   CardHeader,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { FramedTableContainer } from '../../../standalone/components/ComponentAdapter';
 import type { Deployment } from '../../../types/Deployment';
 import {
   SegmentedToggle,
@@ -188,7 +187,7 @@ export const VersionDistributionCard = ({
               />
             </Box>
 
-            <TableContainer component={Paper} variant="outlined">
+            <FramedTableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -228,7 +227,7 @@ export const VersionDistributionCard = ({
                   ))}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </FramedTableContainer>
           </>
         )}
       </CardContent>

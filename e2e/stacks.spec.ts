@@ -72,23 +72,25 @@ test.describe('Stack detail page', () => {
     });
   });
 
-  test('shows deploy button', async ({ page }) => {
+  test('shows create button', async ({ page }) => {
     await page.goto(stackUrl);
-    await expect(page.getByRole('button', { name: /deploy/i }).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(page.getByRole('button', { name: 'Create' })).toBeVisible({ timeout: 10000 });
   });
 
   test('lists the deployments using this stack version', async ({ page }) => {
     await page.goto(stackUrl);
-    // Scoped to the page body: the sidebar has a "Deployments" nav item too.
+    // Scoped to the page body: the sidebar has a "Versions" nav item too.
     await page
       .getByRole('main')
-      .getByRole('button', { name: 'Deployments' })
+      .getByRole('button', { name: 'Versions' })
       .click({ timeout: 10000 });
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
-    await expect(dialog.getByText('bucket_collection_1').first()).toBeVisible({ timeout: 10000 });
+    await page
+      .getByRole('row')
+      .filter({ hasText: '0.0.15-dev+main.9' })
+      .getByRole('button', { name: 'Check stacks deployed using this version' })
+      .click({ timeout: 10000 });
+    const dialog = page.getByRole('dialog').filter({ hasText: 'bucket_collection_1' });
+    await expect(dialog).toBeVisible({ timeout: 10000 });
     // Same version, but a deployment of the ec2 module, not of this stack.
     await expect(dialog.getByText('ec2_instance_1')).toHaveCount(0);
   });

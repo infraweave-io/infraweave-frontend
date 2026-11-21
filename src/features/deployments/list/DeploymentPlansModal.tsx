@@ -21,13 +21,11 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Drawer,
 } from '@mui/material';
-import { Link } from '../../../standalone/components/ComponentAdapter';
+import { FramedTableContainer, Link } from '../../../standalone/components/ComponentAdapter';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
@@ -40,6 +38,7 @@ import { Deployment, Project } from '../../../types/Deployment';
 import { Event } from '../../../types/Event';
 import { ChangeRecord } from '../../../types/Log';
 import { DrawerContent } from '../detail/ReadLogsButton';
+import { formatDateTime } from '../../../utils/format';
 
 interface DeploymentWithEvents extends Deployment {
   events?: Event[];
@@ -446,7 +445,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
 
         {/* Deployment table */}
         {!loading && !error && (
-          <TableContainer component={Paper} sx={{ maxHeight: '60vh' }}>
+          <FramedTableContainer maxHeight="60vh">
             {filteredDeployments.length === 0 ? (
               <Box textAlign="center" py={4}>
                 <Typography variant="body2" color="text.secondary">
@@ -776,9 +775,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
                           }}
                         >
                           <Typography variant="body2" noWrap sx={{ fontSize: '0.85rem' }}>
-                            {deployment.lastChangeTimestamp
-                              ? new Date(deployment.lastChangeTimestamp).toLocaleString()
-                              : 'N/A'}
+                            {formatDateTime(deployment.lastChangeTimestamp) || 'N/A'}
                           </Typography>
                         </TableCell>
                       </TableRow>
@@ -787,7 +784,7 @@ export const DeploymentPlansModal: React.FC<DeploymentPlansModalProps> = ({
                 </TableBody>
               </Table>
             )}
-          </TableContainer>
+          </FramedTableContainer>
         )}
 
         {/* Action buttons */}

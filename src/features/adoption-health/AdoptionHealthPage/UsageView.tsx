@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Alert,
   Box,
@@ -187,7 +187,7 @@ const asOptionalSingleton = (value: string | undefined): string[] | undefined =>
 
 export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => void }) => {
   const fleet = useFleetDeployments();
-  const { context, set, setModuleUsageMode } = useUsageContext();
+  const { context, set, setVersion, setModuleUsageMode } = useUsageContext();
   const {
     countNoun,
     filters,
@@ -205,13 +205,7 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
   } = useUsageViewData({ fleet, kind, context });
 
   const overviewRef = React.useRef<HTMLDivElement>(null);
-  const [openDeployments, setOpenDeployments] = useState(false);
-  const [selectedVersionForModal, setSelectedVersionForModal] = useState('');
   const setSelectedName = (name: string) => set('module', name || undefined);
-  const handleVersionClick = (version: string) => {
-    setSelectedVersionForModal(version);
-    setOpenDeployments(true);
-  };
   const scrollToOverview = () => scrollToSection(overviewRef);
   const selectFromRanking = (name: string) => {
     setSelectedName(name);
@@ -315,7 +309,7 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
               stackDataIncomplete={stackModuleUsageIncomplete}
               overviewRef={overviewRef}
               onSelectName={setSelectedName}
-              onVersionClick={handleVersionClick}
+              onVersionClick={setVersion}
               accountHref={accountHref}
             />
           )}
@@ -325,7 +319,7 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
               key={kind === 'module' ? `${selectedName}:${moduleUsageMode}` : selectedName}
               kind={kind}
               deployments={selectedDeployments}
-              onVersionClick={handleVersionClick}
+              onVersionClick={setVersion}
               countNoun={countNoun}
             />
           )}
@@ -341,13 +335,14 @@ export const UsageView = ({ kind, onBack }: { kind: UsageKind; onBack: () => voi
             />
           )}
 
-          {/* The dialog is shared by version links from both cards. */}
-          {openDeployments && selectedName && !stackModuleUsageLoading && (
+          {/* The dialog is shared by version links from both cards. The version is in the URL,
+              so a link can open the page with its deployments showing. */}
+          {context.version && selectedName && !stackModuleUsageLoading && (
             <DeploymentsDialog
-              open={openDeployments}
-              onClose={() => setOpenDeployments(false)}
+              open
+              onClose={() => setVersion(undefined)}
               moduleName={selectedName}
-              version={selectedVersionForModal}
+              version={context.version}
               resourceType={kind}
               rowLabel={countNoun.label}
               initialProjectIds={asOptionalSingleton(filters.account)}

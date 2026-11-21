@@ -448,6 +448,24 @@ describe('Module Usage source modes', () => {
     );
   });
 
+  it('opens the deployments of the version named in the URL', () => {
+    renderUsage('?module=s3bucket&version=2.0.0');
+
+    expect(
+      within(screen.getByRole('dialog', { name: 'Deployments' })).getByText('s3bucket 2.0.0'),
+    ).toBeInTheDocument();
+  });
+
+  it('drops the version from the URL when another name is selected', async () => {
+    const user = userEvent.setup();
+    renderUsage('?module=s3bucket&version=2.0.0');
+
+    await user.click(rankingRow('standalone-only'));
+
+    expect(screen.getByTestId('search')).toHaveTextContent('?module=standalone-only');
+    expect(screen.getByTestId('search')).not.toHaveTextContent('version=');
+  });
+
   it('warns that within-stack drilldown counts may be incomplete', () => {
     usageMocks.stackIncomplete = true;
     renderBreakdown(

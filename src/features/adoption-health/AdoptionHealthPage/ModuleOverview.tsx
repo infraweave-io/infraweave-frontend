@@ -4,11 +4,9 @@ import {
   Grid,
   LinearProgress,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Tooltip,
@@ -18,6 +16,7 @@ import { Deployment } from '../../../types/Deployment';
 import { isFailedDeployment } from '../../../utils/deploymentStatus';
 import { shortenVersion } from '../../../utils/version';
 import { StatusChip } from '../../../shared/components/StatusChip';
+import { FramedTableContainer } from '../../../standalone/components/ComponentAdapter';
 import {
   countTone,
   formatLastActivity,
@@ -298,7 +297,7 @@ export const ModuleOverview = ({
           <Typography variant="h6" gutterBottom>
             Version adoption
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+          <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
@@ -355,14 +354,14 @@ export const ModuleOverview = ({
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+          </FramedTableContainer>
         </Grid>
 
         <Grid size={{ xs: 12, xl: 5 }}>
           <Typography variant="h6" gutterBottom>
             Accounts
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+          <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
@@ -406,7 +405,7 @@ export const ModuleOverview = ({
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+          </FramedTableContainer>
         </Grid>
       </Grid>
     </Box>

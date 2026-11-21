@@ -12,6 +12,7 @@ import { clearResourceNameCache } from './resourceNameCache';
 import { clearProjectCache } from './projectCache';
 import { clearFleetCache } from './fleetCache';
 import { clearQueryCache } from './queryCache';
+import { clearDeploymentListCache } from './deploymentListCache';
 
 const EXPIRY_SKEW_SECONDS = 60;
 
@@ -74,6 +75,7 @@ export const clearSession = (): void => {
   clearProjectCache();
   clearFleetCache();
   clearQueryCache();
+  clearDeploymentListCache();
 };
 
 // Reload rather than go to '/': the login page renders at the current URL,

@@ -23,6 +23,8 @@ export const DEFAULT_MODULE_USAGE_MODE: ModuleUsageMode = 'both';
 
 export type UsageContext = Partial<Record<ContextKey, string>> & {
   kind?: UsageKind;
+  /** A version of the selected name. The usage page opens its deployments dialog. */
+  version?: string;
   moduleUsageMode?: ModuleUsageMode;
 };
 
@@ -40,6 +42,7 @@ export const usageHref = (view: UsageView, context: UsageContext): string => {
     const value = context[key];
     if (value) params.set(key, value);
     if (key === 'module' && value && context.kind) params.set('kind', context.kind);
+    if (key === 'module' && value && context.version) params.set('version', context.version);
   }
   if (context.moduleUsageMode && context.moduleUsageMode !== DEFAULT_MODULE_USAGE_MODE) {
     params.set('moduleUsageMode', context.moduleUsageMode);
@@ -61,6 +64,8 @@ export const useUsageContext = () => {
   }
   const kind = params.get('kind');
   if (context.module && isUsageKind(kind)) context.kind = kind;
+  const version = params.get('version');
+  if (context.module && version) context.version = version;
 
   const set = React.useCallback(
     (key: ContextKey, value: string | undefined) =>
@@ -69,11 +74,28 @@ export const useUsageContext = () => {
           const next = new URLSearchParams(current);
           if (value) next.set(key, value);
           else next.delete(key);
-          // The usage kind belongs to the selected name.
-          if (key === 'module') next.delete('kind');
+          // The usage kind and version belong to the selected name.
+          if (key === 'module') {
+            next.delete('kind');
+            next.delete('version');
+          }
           return next;
         },
         // In-page picks replace the history entry; only links add one.
+        { replace: true },
+      ),
+    [setParams],
+  );
+
+  const setVersion = React.useCallback(
+    (version: string | undefined) =>
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (version) next.set('version', version);
+          else next.delete('version');
+          return next;
+        },
         { replace: true },
       ),
     [setParams],
@@ -93,7 +115,7 @@ export const useUsageContext = () => {
     [setParams],
   );
 
-  return { context, set, setModuleUsageMode };
+  return { context, set, setVersion, setModuleUsageMode };
 };
 
 export const matchesFilters = (
