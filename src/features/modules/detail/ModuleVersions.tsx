@@ -47,6 +47,7 @@ import { LoadingMore } from '../../../shared/components/LoadingMore';
 import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import { VersionCell } from '../../../shared/components/VersionCell';
+import { formatDateTime } from '../../../utils/format';
 
 /** Every track a version can be published to. */
 const TRACKS = ['stable', 'beta', 'alpha', 'dev'];
@@ -193,7 +194,7 @@ export const DenseTable = ({
           )}
         </Box>
       ),
-      published: mod.timestamp ? new Date(mod.timestamp).toLocaleString() : '',
+      published: formatDateTime(mod.timestamp),
       artifact: mod.s3_key ? (
         <Tooltip title="Browse Artifact">
           <IconButton

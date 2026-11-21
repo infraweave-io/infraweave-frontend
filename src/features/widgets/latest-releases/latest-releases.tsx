@@ -20,7 +20,7 @@ import { fetchAllRegistryPages } from '../../adoption-health/AdoptionHealthPage/
 import { Module } from '../../../types/Module';
 import { shortenVersion } from '../../../utils/version';
 import { bestFuzzyScore } from '../../../utils/fuzzyMatch';
-import { ago } from '../../../utils/format';
+import { ago, formatDateTime } from '../../../utils/format';
 import { trackRank } from '../../../utils/tracks';
 import { useWidgetSetting } from '../widgetSettings';
 import { useOnWidgetReload } from '../widgetReload';
@@ -281,7 +281,7 @@ export const LatestReleasesList = () => {
                     <Typography
                       variant="caption"
                       color="text.secondary"
-                      title={new Date(release.publishedAt).toLocaleString()}
+                      title={formatDateTime(release.publishedAt)}
                       sx={{ flexShrink: 0, minWidth: 56, textAlign: 'right' }}
                     >
                       {ago(release.publishedAt)}

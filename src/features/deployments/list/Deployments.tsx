@@ -52,6 +52,7 @@ import {
   useDeploymentCosts,
 } from '../../../hooks/useDeploymentCosts';
 import { formatCost } from '../../../utils/cost';
+import { formatDateTime } from '../../../utils/format';
 import {
   FIRST_DIRECTION,
   nextSort,
@@ -501,7 +502,7 @@ export const DenseTable = ({
       })(),
       timestamp: (
         <Typography variant="body2" sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>
-          {deployment.epoch ? new Date(deployment.epoch).toLocaleString() : 'N/A'}
+          {formatDateTime(deployment.epoch) || 'N/A'}
         </Typography>
       ),
       // environment: deployment.environment,

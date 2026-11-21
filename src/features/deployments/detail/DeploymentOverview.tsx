@@ -31,6 +31,7 @@ import { DeploymentCost } from './DeploymentCost';
 import { ResourcesDialog } from './ResourcesDialog';
 import PopoverExample from './PopOver';
 import { useConfig } from '../../../hooks/useConfig';
+import { formatDateTime } from '../../../utils/format';
 
 interface DeploymentOverviewProps {
   deployment?: Deployment;
@@ -243,9 +244,8 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                   }),
                 ...(showDetailedInfo &&
                   deployment?.drift_detection?.enabled && {
-                    'Next driftcheck': deployment?.next_drift_check_epoch
-                      ? new Date(deployment.next_drift_check_epoch).toLocaleString()
-                      : 'Not available',
+                    'Next driftcheck':
+                      formatDateTime(deployment?.next_drift_check_epoch) || 'Not available',
                   }),
                 ...(showDetailedInfo &&
                   deployment?.drift_detection?.enabled && {
@@ -267,9 +267,7 @@ export const DeploymentOverview: React.FC<DeploymentOverviewProps> = ({
                 ...(showDetailedInfo && {
                   'Initiated by': deployment?.initiated_by,
                 }),
-                'Last event': deployment?.epoch
-                  ? new Date(deployment.epoch).toLocaleString()
-                  : 'Not available',
+                'Last event': formatDateTime(deployment?.epoch) || 'Not available',
                 ...(showDetailedInfo && {
                   Reference: deployment?.reference?.startsWith('http') ? (
                     <Link to={deployment.reference} target="_blank">

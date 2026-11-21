@@ -28,7 +28,7 @@ import {
 import { isFailedDeployment, statusKind } from '../../../utils/deploymentStatus';
 import { deploymentKey, deploymentLink } from '../../../utils/deploymentLink';
 import { useCachedQuery } from '../../../utils/queryCache';
-import { ago } from '../../../utils/format';
+import { ago, formatDateTime } from '../../../utils/format';
 import { FleetGate } from '../FleetGate';
 import { useWidgetSetting } from '../widgetSettings';
 import { useOnWidgetReload } from '../widgetReload';
@@ -208,7 +208,7 @@ const ActivityList = ({ noun, records, fetchedAt, projectNames, linkFor }: Activ
                 <Typography
                   variant="caption"
                   color="text.secondary"
-                  title={`${new Date(d.epoch).toLocaleString()}${
+                  title={`${formatDateTime(d.epoch)}${
                     d.initiated_by ? ` by ${d.initiated_by}` : ''
                   }`}
                   sx={{ flexShrink: 0 }}

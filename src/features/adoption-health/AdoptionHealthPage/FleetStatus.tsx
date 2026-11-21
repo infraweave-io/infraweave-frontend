@@ -17,6 +17,7 @@ import {
   SourceState,
 } from '../../../utils/deploymentFetch';
 import { FLEET_FRESH_FOR_MS } from '../../../utils/fleetCache';
+import { ago } from '../../../utils/format';
 import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import { Deployment } from '../../../types/Deployment';
 import { FleetDeployments } from './useFleetDeployments';
@@ -49,15 +50,6 @@ export type FleetScope = {
   deployments: Deployment[];
   /** E.g. `stack deployment` / `stack deployments`. */
   noun: { singular: string; plural: string };
-};
-
-const ago = (epoch: number): string => {
-  const minutes = Math.round((Date.now() - epoch) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return new Date(epoch).toLocaleString();
 };
 
 const SourceList = ({ sources }: { sources: SourceProgress[] }) => {
