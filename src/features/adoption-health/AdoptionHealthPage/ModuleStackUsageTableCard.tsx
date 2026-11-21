@@ -104,8 +104,10 @@ export const ModuleStackUsageTableCard = ({
         Cell: ({ row }) => <ModuleVersionLink relationship={row.original} />,
         GroupedCell: ({ row }) => (
           <>
-            <ModuleVersionLink relationship={row.getLeafRows()[0].original} /> ({row.subRows.length}
-            )
+            <ModuleVersionLink relationship={row.getLeafRows()[0].original} />{' '}
+            <Typography component="span" fontWeight="normal">
+              ({row.subRows.length})
+            </Typography>
           </>
         ),
       },
@@ -142,6 +144,7 @@ export const ModuleStackUsageTableCard = ({
         Cell: ({ row }) => (
           <Button
             size="small"
+            sx={{ minWidth: 0, minHeight: 0, p: 0, lineHeight: 'inherit' }}
             onClick={() => setSelectedRelationship(row.original)}
             aria-label={`View deployments for module ${row.original.moduleName} version ${row.original.moduleVersion} in stack ${row.original.stackName} version ${row.original.stackVersion}`}
           >
@@ -181,6 +184,7 @@ export const ModuleStackUsageTableCard = ({
     columns,
     data,
     enableColumnActions: false,
+    enableDensityToggle: false,
     enableGrouping: true,
     enableColumnDragging: false,
     enableColumnFilters: true,
@@ -191,7 +195,7 @@ export const ModuleStackUsageTableCard = ({
     groupedColumnMode: 'reorder',
     initialState: {
       grouping: ['moduleVersion', 'stackName'],
-      columnVisibility: { deploymentCount: false, accountCount: false, regionCount: false },
+      columnVisibility: { deploymentCount: true, accountCount: false, regionCount: false },
       expanded: {},
       showColumnFilters: false,
       showGlobalFilter: true,
