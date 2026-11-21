@@ -13,21 +13,26 @@ import {
   deployments_123808927997_eu_central_1,
   deployments_123808927997_us_west_2,
 } from './deployments';
+import { adoptionHealthStackDeployments, adoptionHealthStacks } from './adoptionHealthStackUsage';
 
 const DEPLOYMENTS_BY_PROJECT: Record<string, Record<string, any[]>> = {
   '123808927999': {
-    'us-west-2': deployments_123808927999_us_west_2,
-    'eu-central-1': deployments_123808927999_eu_central_1,
+    'us-west-2': [...deployments_123808927999_us_west_2],
+    'eu-central-1': [...deployments_123808927999_eu_central_1],
   },
   '123808927998': {
-    'us-west-2': deployments_123808927998_us_west_2,
-    'eu-central-1': deployments_123808927998_eu_central_1,
+    'us-west-2': [...deployments_123808927998_us_west_2],
+    'eu-central-1': [...deployments_123808927998_eu_central_1],
   },
   '123808927997': {
-    'us-west-2': deployments_123808927997_us_west_2,
-    'eu-central-1': deployments_123808927997_eu_central_1,
+    'us-west-2': [...deployments_123808927997_us_west_2],
+    'eu-central-1': [...deployments_123808927997_eu_central_1],
   },
 };
+
+for (const deployment of adoptionHealthStackDeployments) {
+  DEPLOYMENTS_BY_PROJECT[deployment.project_id][deployment.region].push(deployment);
+}
 
 // Match requests to any origin (handles both direct and proxied API calls)
 const backendBaseUrl = '*';
@@ -91,6 +96,16 @@ export const handlers = [
     'get',
     '/api/v1/deployment/123808927998/eu-central-1/staging/website_runner_1',
     () => HttpResponse.json(deployments_123808927998_eu_central_1[1]),
+  ),
+  // The Adoption & Health fixtures are in the fleet, so their detail pages must load too.
+  ...adoptionHealthStackDeployments.flatMap((deployment) =>
+    createHandler(
+      'get',
+      `/api/v1/deployment/${deployment.project_id}/${deployment.region}/${encodeURIComponent(
+        deployment.environment,
+      )}/${encodeURIComponent(deployment.deployment_id)}`,
+      () => HttpResponse.json(deployment),
+    ),
   ),
 
   // ============= LOGS =============
@@ -254,6 +269,16 @@ export const handlers = [
   ),
   ...createHandler('get', '/api/v1/stack/dev/websiterunner/0.0.15-dev%2Bmain.6', () =>
     HttpResponse.json(stacks[1]),
+  ),
+
+  ...adoptionHealthStacks.flatMap((stack) =>
+    createHandler(
+      'get',
+      `/api/v1/stack/${stack.track}/${encodeURIComponent(stack.module)}/${encodeURIComponent(
+        stack.version,
+      )}`,
+      () => HttpResponse.json(stack),
+    ),
   ),
   // Module endpoints for stacks (treat stacks as modules)
   ...createHandler('get', '/api/v1/module/dev/bucketcollection/0.0.15-dev%2Bmain.9', () =>

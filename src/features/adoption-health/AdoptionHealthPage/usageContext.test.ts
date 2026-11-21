@@ -51,12 +51,12 @@ describe('usageHref', () => {
         module: 's3bucket',
         kind: 'module',
         region: 'us-east-1',
-        moduleUsageMode: 'both',
+        moduleUsageMode: 'standalone',
       }),
     ).toBe(
-      '/infraweave/adoption-health/region-usage?module=s3bucket&kind=module&region=us-east-1&moduleUsageMode=both',
+      '/infraweave/adoption-health/region-usage?module=s3bucket&kind=module&region=us-east-1&moduleUsageMode=standalone',
     );
-    expect(usageHref('region-usage', { module: 's3bucket', moduleUsageMode: 'standalone' })).toBe(
+    expect(usageHref('region-usage', { module: 's3bucket', moduleUsageMode: 'both' })).toBe(
       '/infraweave/adoption-health/region-usage?module=s3bucket',
     );
   });
@@ -97,11 +97,11 @@ describe('useUsageContext', () => {
         React.createElement(MemoryRouter, { initialEntries: [url] }, children),
     });
 
-  it('defaults a missing or invalid mode to standalone and reads mode separately from kind', () => {
+  it('defaults a missing or invalid mode to both and reads mode separately from kind', () => {
     expect(renderAt('/?module=net&kind=stack').result.current.context).toEqual({
       module: 'net',
       kind: 'stack',
-      moduleUsageMode: 'standalone',
+      moduleUsageMode: 'both',
     });
     expect(
       renderAt('/?module=net&kind=module&moduleUsageMode=in-stacks').result.current.context,
@@ -114,28 +114,20 @@ describe('useUsageContext', () => {
       renderAt('/?kind=stack&region=eu-west-1&moduleUsageMode=unknown').result.current.context,
     ).toEqual({
       region: 'eu-west-1',
-      moduleUsageMode: 'standalone',
+      moduleUsageMode: 'both',
     });
   });
 
   it('drops kind when module changes without changing its separate usage mode', () => {
-    const { result } = renderAt('/?module=net&kind=module&moduleUsageMode=both');
+    const { result } = renderAt('/?module=net&kind=module&moduleUsageMode=standalone');
 
     act(() => result.current.set('module', 'vpc'));
 
-    expect(result.current.context).toEqual({ module: 'vpc', moduleUsageMode: 'both' });
+    expect(result.current.context).toEqual({ module: 'vpc', moduleUsageMode: 'standalone' });
   });
 
-  it('changes the usage mode in place and removes the query for standalone', () => {
+  it('changes the usage mode in place and keeps a non-default mode in the query', () => {
     const { result } = renderAt('/?module=s3bucket&kind=module&account=1');
-
-    act(() => result.current.setModuleUsageMode('in-stacks'));
-    expect(result.current.context).toEqual({
-      module: 's3bucket',
-      kind: 'module',
-      account: '1',
-      moduleUsageMode: 'in-stacks',
-    });
 
     act(() => result.current.setModuleUsageMode('standalone'));
     expect(result.current.context).toEqual({
@@ -143,6 +135,14 @@ describe('useUsageContext', () => {
       kind: 'module',
       account: '1',
       moduleUsageMode: 'standalone',
+    });
+
+    act(() => result.current.setModuleUsageMode('both'));
+    expect(result.current.context).toEqual({
+      module: 's3bucket',
+      kind: 'module',
+      account: '1',
+      moduleUsageMode: 'both',
     });
   });
 });
