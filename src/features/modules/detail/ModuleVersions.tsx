@@ -26,6 +26,9 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import { Link as RouterLink } from 'react-router-dom';
+import { usageHref } from '../../adoption-health/AdoptionHealthPage/usageContext';
 import { ZipBrowser } from '../../../shared/components/ZipBrowser';
 import { useAsync } from '../../../hooks/useAsync';
 import { Module } from '../../../types/Module';
@@ -134,13 +137,13 @@ export const DenseTable = ({
           { title: 'Version', width: '200', field: 'version' },
           { title: 'Published', width: '200', field: 'published' },
           { title: 'Artifact', width: '100', field: 'artifact' },
-          { title: 'Actions', width: '100', field: 'actions' },
+          { title: 'Actions', width: '130', field: 'actions' },
         ]
       : [
           { title: 'Version', width: '200', field: 'version' },
           { title: 'Published', width: '200', field: 'published' },
           { title: 'Artifact', width: '100', field: 'artifact' },
-          { title: 'Actions', width: '100', field: 'actions' },
+          { title: 'Actions', width: '130', field: 'actions' },
         ]
     : showTrack
       ? [
@@ -149,14 +152,14 @@ export const DenseTable = ({
           { title: 'Published', width: '200', field: 'published' },
           { title: 'Changes', width: '400', field: 'diffs' },
           { title: 'Artifact', width: '100', field: 'artifact' },
-          { title: 'Actions', width: '100', field: 'actions' },
+          { title: 'Actions', width: '130', field: 'actions' },
         ]
       : [
           { title: 'Version', width: '200', field: 'version' },
           { title: 'Published', width: '200', field: 'published' },
           { title: 'Changes', width: '400', field: 'diffs' },
           { title: 'Artifact', width: '100', field: 'artifact' },
-          { title: 'Actions', width: '100', field: 'actions' },
+          { title: 'Actions', width: '130', field: 'actions' },
         ];
 
   // Sort modules by timestamp (newest first)
@@ -212,6 +215,20 @@ export const DenseTable = ({
               </IconButton>
             </Tooltip>
           )}
+          <Tooltip title={`Open usage of this ${resourceType} version`}>
+            <IconButton
+              size="small"
+              component={RouterLink}
+              to={usageHref(`${resourceType}-usage`, {
+                module: mod.module,
+                version: mod.version,
+              })}
+              onClick={onVersionClick}
+              aria-label={`Usage of ${resourceType} version ${mod.version}`}
+            >
+              <QueryStatsIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title={`Check ${resourceType}s deployed using this version`}>
             <IconButton
               size="small"

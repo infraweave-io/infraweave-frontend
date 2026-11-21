@@ -35,11 +35,9 @@ test.describe('Module detail page', () => {
     );
   });
 
-  test('shows deploy button', async ({ page }) => {
+  test('shows create button', async ({ page }) => {
     await page.goto(moduleUrl);
-    await expect(page.getByRole('button', { name: /deploy/i }).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(page.getByRole('button', { name: 'Create' })).toBeVisible({ timeout: 10000 });
   });
 
   test('header Create button opens paginated deploy dialog ending in editable manifest', async ({
