@@ -3,11 +3,9 @@ import {
   Box,
   LinearProgress,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -15,9 +13,8 @@ import {
 import { Deployment } from '../../../types/Deployment';
 import { isFailedDeployment } from '../../../utils/deploymentStatus';
 import { COUNT_NOUN, type CountNoun, type UsageKind } from './usageContext';
-
-/** Max height in px before the table scrolls instead of growing the page. */
-const TABLE_MAX_HEIGHT = 420;
+import { TABLE_MAX_HEIGHT } from './OverviewParts';
+import { FramedTableContainer } from '../../../standalone/components/ComponentAdapter';
 
 type RankingRow = {
   name: string;
@@ -106,7 +103,7 @@ export const UsageRanking = ({
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         {inUse} of {rows.length} {kind}s have active {countNoun.plural}.
       </Typography>
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: TABLE_MAX_HEIGHT }}>
+      <FramedTableContainer maxHeight={TABLE_MAX_HEIGHT}>
         <Table size="small" stickyHeader aria-label={`${kind}s by number of ${countNoun.plural}`}>
           <TableHead>
             <TableRow>
@@ -166,7 +163,7 @@ export const UsageRanking = ({
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </FramedTableContainer>
     </Box>
   );
 };

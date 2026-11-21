@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  FramedTableContainer,
   InfoCard,
   Link,
   ResponseErrorPanel,
@@ -8,11 +9,9 @@ import {
   Box,
   Button,
   Grid,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -116,7 +115,7 @@ export const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
                     No deployments currently in failed state. Great job!
                   </Typography>
                 ) : (
-                  <TableContainer component={Paper} elevation={0}>
+                  <FramedTableContainer>
                     <Table size="small">
                       <TableHead>
                         <TableRow>
@@ -145,7 +144,7 @@ export const DeploymentHealthView = ({ onBack }: { onBack: () => void }) => {
                         ))}
                       </TableBody>
                     </Table>
-                  </TableContainer>
+                  </FramedTableContainer>
                 )}
               </InfoCard>
             </Grid>

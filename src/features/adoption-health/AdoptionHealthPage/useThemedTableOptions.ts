@@ -1,6 +1,7 @@
 import type { MRT_DensityState, MRT_RowData, MRT_TableOptions } from 'material-react-table';
 import { useTheme } from '@mui/material/styles';
 import { surfaces } from '../../../contexts/ThemeContext';
+import { TABLE_FRAME_RADIUS } from '../../../standalone/components/ComponentAdapter';
 import { renderGroupingSummary } from './GroupingSummary';
 
 /** Vertical cell padding per density. `compact` matches the shared `Table` in the details views. */
@@ -34,7 +35,7 @@ export const useThemedTableOptions = <TData extends MRT_RowData>({
     muiTablePaperProps: {
       elevation: 0,
       variant: 'outlined',
-      sx: { borderRadius: 2, overflow: 'hidden' },
+      sx: { borderRadius: TABLE_FRAME_RADIUS, overflow: 'hidden' },
     },
     muiTopToolbarProps: {
       sx: {
