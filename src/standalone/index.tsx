@@ -11,6 +11,7 @@ import { StandaloneApp } from './StandaloneApp';
 import { clearResourceNameCache } from '../utils/resourceNameCache';
 import { clearProjectCache } from '../utils/projectCache';
 import { clearFleetCache } from '../utils/fleetCache';
+import { clearDeploymentListCache } from '../utils/deploymentListCache';
 
 // Set standalone flag for components to detect environment
 (window as any).__INFRAWEAVE_STANDALONE__ = true;
@@ -42,6 +43,7 @@ async function enableMocking() {
   // Mock fixture changes do not change the mode, so refresh the fleet on each mock app start.
   if (modeChanged || USE_MOCKS) {
     clearFleetCache();
+    clearDeploymentListCache();
   }
 
   if (!USE_MOCKS) {

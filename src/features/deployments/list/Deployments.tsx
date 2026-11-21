@@ -25,6 +25,7 @@ import {
   Chip,
   Skeleton,
   TableSortLabel,
+  CircularProgress,
 } from '@mui/material';
 import { MONO_FONT } from '../../../contexts/ThemeContext';
 import Refresh from '@mui/icons-material/Refresh';
@@ -65,6 +66,8 @@ type DenseTableProps = {
   deployments: Deployment[];
   projects: Project[];
   onRefresh: () => void;
+  /** The rows on screen are being reloaded, e.g. drawn from the cache and checked for changes. */
+  refreshing?: boolean;
   dialogOpen: (open: boolean) => void;
   selectedProjectNames: string[];
   selectedRegions: string[];
@@ -229,6 +232,7 @@ export const DenseTable = ({
   deployments,
   projects,
   onRefresh,
+  refreshing = false,
   dialogOpen,
   selectedProjectNames,
   selectedRegions,
@@ -555,9 +559,20 @@ export const DenseTable = ({
             }}
           >
             <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-              <Tooltip title="Refresh deployments">
-                <IconButton size="small" onClick={onRefresh} sx={{ color: 'text.secondary' }}>
-                  <Refresh fontSize="small" />
+              <Tooltip title={refreshing ? 'Checking for updates...' : 'Refresh deployments'}>
+                <IconButton
+                  size="small"
+                  onClick={onRefresh}
+                  aria-busy={refreshing}
+                  aria-label={refreshing ? 'Checking for updates' : 'Refresh deployments'}
+                  sx={{ color: 'text.secondary' }}
+                >
+                  {refreshing ? (
+                    // Sized to the icon it replaces, so the toolbar does not shift.
+                    <CircularProgress size={16} thickness={5} sx={{ m: '2px', color: 'inherit' }} />
+                  ) : (
+                    <Refresh fontSize="small" />
+                  )}
                 </IconButton>
               </Tooltip>
               {hiddenColumns.length > 0 && (
@@ -837,12 +852,8 @@ export const Deployments = ({ module }: { module?: string }) => {
   const { selectedProjectNames, projects, selectedRegions } = useSelectedProjects();
   const [_dialogOpen, setDialogOpen] = useState(false);
 
-  const { deployments, loading, error, incomplete, refetch, isModalOpenRef } = useDeployments(
-    projects,
-    selectedProjectNames,
-    selectedRegions,
-    module,
-  );
+  const { deployments, loading, refreshing, error, incomplete, refetch, isModalOpenRef } =
+    useDeployments(projects, selectedProjectNames, selectedRegions, module);
 
   if (loading) {
     return <Progress />;
@@ -856,6 +867,7 @@ export const Deployments = ({ module }: { module?: string }) => {
         deployments={deployments}
         projects={projects}
         onRefresh={refetch}
+        refreshing={refreshing}
         dialogOpen={setDialogOpen}
         selectedProjectNames={selectedProjectNames}
         selectedRegions={selectedRegions}
