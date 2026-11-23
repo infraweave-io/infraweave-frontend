@@ -48,15 +48,13 @@ export const TopModulesChart = () => {
       if (d.module_version) row.versions.add(d.module_version);
     }
     return Array.from(byName.entries())
-      .map(
-        ([name, row]): ModuleRow => ({
-          name,
-          count: row.count,
-          failing: row.failing,
-          accounts: row.accounts.size,
-          versions: row.versions.size,
-        }),
-      )
+      .map(([name, row]): ModuleRow => ({
+        name,
+        count: row.count,
+        failing: row.failing,
+        accounts: row.accounts.size,
+        versions: row.versions.size,
+      }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [fleet.deployments, fleet.stackCatalogue]);
 

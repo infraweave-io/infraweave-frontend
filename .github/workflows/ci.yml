@@ -83,8 +83,25 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # TODO: switch the type check from tsc to oxlint once `--type-check` leaves
+      # experimental. Tested with oxlint 1.93.0 + oxlint-tsgolint 7.0.2007: 0 errors
+      # (same as tsc), real errors still caught, ~4x faster locally (3.5 s -> 0.8 s).
+      # Steps:
+      #   1. devDependency: npm i -D oxlint-tsgolint (provides the TypeScript-Go checker).
+      #   2. tsconfig.json: add "strict": false to compilerOptions. TypeScript 7 defaults
+      #      to strict; TS 5.x did not, so this keeps today's behaviour.
+      #   3. New .oxlintrc.typecheck.json (type-check only, no lint rules). Its ignores
+      #      must mirror tsconfig.json "exclude", or it checks files tsc never does:
+      #        { "plugins": [], "categories": { "correctness": "off" },
+      #          "ignorePatterns": ["src/standalone/**", "src/dev/**",
+      #                             "**/*.test.ts", "**/*.test.tsx"] }
+      #   4. package.json "typecheck":
+      #        oxlint -c .oxlintrc.typecheck.json --type-aware --type-check src
+      #      (src only: root files such as vite.config.mts are outside tsconfig "include").
+      #   5. This step stays `npm run typecheck`; drop the typescript devDependency only
+      #      if nothing else needs it (editors and Vite/Vitest read tsconfig.json).
       - name: Typecheck
-        run: npm run lint
+        run: npm run typecheck
 
       - name: Run unit tests
         run: npm test

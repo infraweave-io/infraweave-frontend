@@ -77,7 +77,7 @@ const normaliseProvider = (input: OAuthProviderInput): OAuthProvider => {
 
   const scopes = Array.isArray(input.scopes)
     ? input.scopes.join(' ')
-    : input.scopes ?? DEFAULT_SCOPES;
+    : (input.scopes ?? DEFAULT_SCOPES);
 
   return {
     id: input.id,

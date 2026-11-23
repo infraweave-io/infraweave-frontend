@@ -646,7 +646,7 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
   // Configured groups, narrowed by the filters, so groups with no deployments still get a row.
   const configured = React.useMemo(() => {
     if (by === 'region') {
-      return filters.account ? projectRegions[filters.account] ?? [] : fleet.regions;
+      return filters.account ? (projectRegions[filters.account] ?? []) : fleet.regions;
     }
     const accounts = Object.keys(projectNames);
     return filters.region
@@ -661,7 +661,7 @@ export const BreakdownView = ({ by, onBack }: { by: BreakdownDimension; onBack: 
     if (!selected) return null;
     const inGroup = filtered.filter((d) => spec.groupOf(d) === selected);
     // An account's configured regions get a row even when nothing runs in them.
-    const accountRegions = by === 'account' ? projectRegions[selected] ?? [] : [];
+    const accountRegions = by === 'account' ? (projectRegions[selected] ?? []) : [];
     const configuredBreakdown = filters.region
       ? accountRegions.filter((region) => region === filters.region)
       : accountRegions;

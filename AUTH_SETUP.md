@@ -26,7 +26,7 @@ Because step 4 runs in the browser, the OAuth client **must be public** (no clie
   "tokenEndpoint": "https://.../token", // required when type=generic
   "clientId": "abc123", // required
   "scopes": "openid profile email", // string or array, default shown
-  "icon": "cloud" // "cloud" | "lock" | (default login icon)
+  "icon": "cloud", // "cloud" | "lock" | (default login icon)
 }
 ```
 

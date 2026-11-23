@@ -383,7 +383,7 @@ export const ModuleOverview = ({
                               {projectNames[row.projectId] ?? row.projectId}
                             </UsageLink>
                           ) : (
-                            projectNames[row.projectId] ?? row.projectId
+                            (projectNames[row.projectId] ?? row.projectId)
                           )}
                         </span>
                       </Tooltip>
