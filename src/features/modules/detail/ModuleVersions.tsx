@@ -48,6 +48,10 @@ import { ListIncomplete } from '../../../shared/components/ListIncomplete';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import { VersionCell } from '../../../shared/components/VersionCell';
 import { formatDateTime } from '../../../utils/format';
+import {
+  fetchAllRegistryPages,
+  type CataloguePages,
+} from '../../adoption-health/AdoptionHealthPage/useFleetDeployments';
 
 /** Every track a version can be published to. */
 const TRACKS = ['stable', 'beta', 'alpha', 'dev'];
@@ -875,7 +879,7 @@ export const ModuleVersions = ({
   const [includeDev000, setIncludeDev000] = useState(false);
   const [includeDeprecated, setIncludeDeprecated] = useState(false);
 
-  const { value, loading, error } = useAsync(async (): Promise<Module[]> => {
+  const { value, loading, error } = useAsync(async (): Promise<CataloguePages> => {
     const fields = [
       'module',
       'module_name',
@@ -887,49 +891,29 @@ export const ModuleVersions = ({
       ...(hideChanges ? [] : ['version_diff']),
     ].join(',');
     const queryParams = `include_dev000=${includeDev000}&include_deprecated=${includeDeprecated}&fields=${fields}`;
+    const versionsPath = (t?: string) =>
+      `api/proxy/api/infraweave/api/v1/${resourceType}s/versions/${t}/${module}?${queryParams}`;
 
+    // Every page, not just the first: a version record carries its whole manifest, so a
+    // 1MB DynamoDB page holds only a handful of them.
     if (allTracks) {
-      // Fetch versions from all tracks
       const allVersions: Module[] = [];
+      let complete = true;
 
       for (const t of TRACKS) {
         try {
-          let url = config.getApiUrl(
-            `api/proxy/api/infraweave/api/v1/${resourceType}s/versions/${t}/${module}`,
-          );
-          url += (url.includes('?') ? '&' : '?') + queryParams;
-
-          const response = await config.fetch(url);
-
-          if (response.ok) {
-            const json = await response.json();
-            const items = json.Items || json.items || json;
-            if (Array.isArray(items)) {
-              allVersions.push(...items);
-            }
-          }
+          const result = await fetchAllRegistryPages(config, versionsPath(t));
+          allVersions.push(...result.items);
+          complete = complete && result.complete;
         } catch (_err) {
           // No versions found for this track
         }
       }
 
-      return allVersions;
+      return { items: allVersions, complete };
     }
 
-    let url = config.getApiUrl(
-      `api/proxy/api/infraweave/api/v1/${resourceType}s/versions/${track}/${module}`,
-    );
-    url += (url.includes('?') ? '&' : '?') + queryParams;
-
-    const response = await config.fetch(url);
-
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error('Redirected to login or guest page');
-    }
-
-    const json = await response.json();
-
-    return json.Items || json.items || json;
+    return fetchAllRegistryPages(config, versionsPath(track));
   }, [track, module, allTracks, resourceType, includeDev000, includeDeprecated]);
 
   if (loading) {
@@ -941,7 +925,7 @@ export const ModuleVersions = ({
   return (
     <>
       <DenseTable
-        modules={value || []}
+        modules={value?.items || []}
         hideChanges={hideChanges}
         hideTitle={hideTitle}
         showTrack={allTracks}
@@ -954,6 +938,7 @@ export const ModuleVersions = ({
         includeDeprecated={includeDeprecated}
         onIncludeDeprecatedChange={setIncludeDeprecated}
       />
+      {value && !value.complete && <ListIncomplete label="versions" />}
     </>
   );
 };

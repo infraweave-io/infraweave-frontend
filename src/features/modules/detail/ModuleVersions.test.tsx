@@ -47,4 +47,21 @@ describe('ModuleVersions', () => {
       );
     },
   );
+
+  it('follows next_token past the first page of versions', async () => {
+    const requested: string[] = [];
+    renderVersions('stack', async (url) => {
+      requested.push(url);
+      const second = url.includes('next_token=page-2');
+      return new Response(JSON.stringify([version(second ? '0.0.97-alpha' : '0.0.98-alpha')]), {
+        status: 200,
+        headers: second ? {} : { 'x-next-token': 'page-2' },
+      });
+    });
+
+    expect(await screen.findByRole('link', { name: '0.0.97-alpha' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '0.0.98-alpha' })).toBeInTheDocument();
+    expect(requested).toHaveLength(2);
+    expect(screen.queryByText(/This list is incomplete/)).not.toBeInTheDocument();
+  });
 });
