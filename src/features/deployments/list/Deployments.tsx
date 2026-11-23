@@ -405,7 +405,7 @@ export const DenseTable = ({
         // with no cost in the window costs nothing.
         cost: (d) =>
           deploymentCosts.loadedProjects.has(d.project_id)
-            ? deploymentCosts.costs.get(deploymentCostKey(d.project_id, d.deployment_id)) ?? 0
+            ? (deploymentCosts.costs.get(deploymentCostKey(d.project_id, d.deployment_id)) ?? 0)
             : undefined,
       },
     );

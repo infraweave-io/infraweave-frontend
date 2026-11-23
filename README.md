@@ -116,7 +116,9 @@ npm run test:watch
 npm run test:e2e         # Playwright
 npm run test:e2e:ui
 npm run test:e2e:report
-npm run lint             # tsc --noEmit
+npm run lint             # oxlint, TS/TSX (.oxlintrc.json; also a pre-commit hook)
+npm run typecheck        # tsc --noEmit
+npx oxfmt                # format in place (.oxfmtrc.json; also a pre-commit hook)
 ```
 
 ---

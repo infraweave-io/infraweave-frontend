@@ -278,7 +278,7 @@ export const useFleetDeployments = (): FleetDeployments => {
     loadFailed: Boolean(fleet.failed),
     incomplete: fleet.incomplete,
     // A failed project refresh over a cached list is not worth blanking the page for.
-    error: projects.length === 0 ? projectsError ?? null : null,
+    error: projects.length === 0 ? (projectsError ?? null) : null,
     refresh,
   };
 };

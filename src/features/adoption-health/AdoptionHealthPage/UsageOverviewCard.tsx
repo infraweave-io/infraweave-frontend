@@ -53,7 +53,7 @@ export const UsageOverviewCard = ({
     ? `Source: ${MODULE_USAGE_MODE_LABEL[moduleUsageMode]}`
     : undefined;
   const subheader =
-    activeFilters && source ? `${activeFilters} · ${source}` : activeFilters ?? source;
+    activeFilters && source ? `${activeFilters} · ${source}` : (activeFilters ?? source);
   const countNoun = COUNT_NOUN[moduleUsageMode ?? 'standalone'];
 
   return (
