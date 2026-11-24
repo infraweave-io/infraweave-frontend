@@ -3,15 +3,20 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and lock file
-COPY package.json package-lock.json ./
+# Copy manifest, lock file and pnpm settings (overrides, allowBuilds); a frozen
+# install fails without pnpm-workspace.yaml
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN npm ci
+# Install the pnpm version from "packageManager" with npm.
+# Not corepack: Node 25 and later do not include it.
+RUN npm install --global "$(node -p "require('./package.json').packageManager")"
+
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

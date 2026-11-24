@@ -11,6 +11,8 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-yaml
+        # pnpm writes the lockfile as two YAML documents (package manager + deps)
+        exclude: ^pnpm-lock\.yaml$
       - id: check-json
       - id: check-merge-conflict
       - id: detect-private-key

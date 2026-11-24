@@ -19,7 +19,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx vite --mode e2e --port 3001 --host',
+    command: 'pnpm exec vite --mode e2e --port 3001 --host',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

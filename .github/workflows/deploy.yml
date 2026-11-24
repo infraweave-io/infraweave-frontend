@@ -24,19 +24,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Build staging bundle
         # Backend config comes from the committed .env.staging (public values —
         # API Gateway URL, Cognito domain + clientId; the app holds no secrets).
-        run: npx vite build --mode staging --base=/
+        run: pnpm exec vite build --mode staging --base=/
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -70,19 +73,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Build production bundle
         # Backend config comes from the committed .env.production (public values —
         # API Gateway URL, Cognito domain + clientId; the app holds no secrets).
-        run: npx vite build --mode production --base=/
+        run: pnpm exec vite build --mode production --base=/
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

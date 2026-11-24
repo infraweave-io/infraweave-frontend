@@ -217,7 +217,7 @@ fs.writeFileSync(OUTPUT_FILE, html, 'utf8');
 console.log(`✓ Report written to ${OUTPUT_FILE} (${screenshots.length} screenshots)`);
 
 async function writePdf() {
-  const { chromium } = require('playwright');
+  const { chromium } = require('@playwright/test');
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto(`file://${OUTPUT_FILE}`, { waitUntil: 'networkidle' });
