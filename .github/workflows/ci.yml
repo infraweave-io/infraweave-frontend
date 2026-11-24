@@ -23,14 +23,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      # pnpm version comes from "packageManager" in package.json. It must be on
+      # PATH before setup-node so `cache: pnpm` can locate the store.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          cache: pnpm
 
       - name: Install Node.js dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -71,23 +76,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          cache: pnpm
 
       - name: Install Node.js dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       # TODO: switch the type check from tsc to oxlint once `--type-check` leaves
       # experimental. Tested with oxlint 1.93.0 + oxlint-tsgolint 7.0.2007: 0 errors
       # (same as tsc), real errors still caught, ~4x faster locally (3.5 s -> 0.8 s).
       # Steps:
-      #   1. devDependency: npm i -D oxlint-tsgolint (provides the TypeScript-Go checker).
+      #   1. devDependency: pnpm add -D oxlint-tsgolint (provides the TypeScript-Go checker).
       #   2. tsconfig.json: add "strict": false to compilerOptions. TypeScript 7 defaults
       #      to strict; TS 5.x did not, so this keeps today's behaviour.
       #   3. New .oxlintrc.typecheck.json (type-check only, no lint rules). Its ignores
@@ -98,23 +106,23 @@ jobs:
       #   4. package.json "typecheck":
       #        oxlint -c .oxlintrc.typecheck.json --type-aware --type-check src
       #      (src only: root files such as vite.config.mts are outside tsconfig "include").
-      #   5. This step stays `npm run typecheck`; drop the typescript devDependency only
+      #   5. This step stays `pnpm run typecheck`; drop the typescript devDependency only
       #      if nothing else needs it (editors and Vite/Vitest read tsconfig.json).
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Run unit tests
-        run: npm test
+        run: pnpm test
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run Playwright tests
-        run: npm run test:e2e
+        run: pnpm run test:e2e
 
       - name: Generate Playwright screenshot PDF
         if: always()
-        run: npm run test:e2e:screenshots:pdf
+        run: pnpm run test:e2e:screenshots:pdf
 
       - name: Upload Playwright report
         if: always()

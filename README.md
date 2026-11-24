@@ -19,11 +19,11 @@ Standalone frontend application for the InfraWeave platform. Runs as a single-pa
 
 ## Quick Start
 
-**Prerequisites:** Node.js 18+ and npm.
+**Prerequisites:** Node.js 24 (see `.nvmrc`) and pnpm. The pnpm version is pinned in `packageManager` in `package.json`; install it with `npm install -g pnpm@<version>` or `corepack enable` (Node.js 24 and older).
 
 ```bash
-npm install
-npm run start:mock      # fastest way to explore the UI — no backend required
+pnpm install
+pnpm start:mock         # fastest way to explore the UI — no backend required
 ```
 
 The app opens at http://localhost:3000 with MSW intercepting all API calls.
@@ -34,11 +34,11 @@ The app opens at http://localhost:3000 with MSW intercepting all API calls.
 
 Each script invokes vite with a mode that loads the matching env file. `.env` (committed defaults) and `.env.local` (personal git-ignored overrides) auto-load in every mode; mode-specific files (`.env.mock`, `.env.real`) are layered on top.
 
-| Script               | Vite invocation                              | Use when                                                                |
-| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
-| `npm start`          | `vite`                                       | Personal dev config (`.env.local`)                                      |
-| `npm run start:mock` | `vite --mode mock`                           | Exploring the UI with MSW mock data (`.env.mock`)                       |
-| `npm run start:real` | `vite build --mode real && vite preview ...` | Production-style build served via `vite preview` against a real backend |
+| Script            | Vite invocation                              | Use when                                                                |
+| ----------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
+| `pnpm start`      | `vite`                                       | Personal dev config (`.env.local`)                                      |
+| `pnpm start:mock` | `vite --mode mock`                           | Exploring the UI with MSW mock data (`.env.mock`)                       |
+| `pnpm start:real` | `vite build --mode real && vite preview ...` | Production-style build served via `vite preview` against a real backend |
 
 The `start:real` script runs `vite build` then `vite preview` — no HMR, no React StrictMode double-invocation. Useful for reproducing prod-only issues.
 
@@ -111,14 +111,14 @@ Both relationship tables warn if the app cannot load some deployed stack composi
 ## Testing
 
 ```bash
-npm test                 # unit tests (vitest, happy-dom)
-npm run test:watch
-npm run test:e2e         # Playwright
-npm run test:e2e:ui
-npm run test:e2e:report
-npm run lint             # oxlint, TS/TSX (.oxlintrc.json; also a pre-commit hook)
-npm run typecheck        # tsc --noEmit
-npx oxfmt                # format in place (.oxfmtrc.json; also a pre-commit hook)
+pnpm test                # unit tests (vitest, happy-dom)
+pnpm test:watch
+pnpm test:e2e            # Playwright
+pnpm test:e2e:ui
+pnpm test:e2e:report
+pnpm lint                # oxlint, TS/TSX (.oxlintrc.json; also a pre-commit hook)
+pnpm typecheck           # tsc --noEmit
+pnpm exec oxfmt          # format in place (.oxfmtrc.json; also a pre-commit hook)
 ```
 
 ---
@@ -126,10 +126,10 @@ npx oxfmt                # format in place (.oxfmtrc.json; also a pre-commit hoo
 ## Production Build
 
 ```bash
-npm run build
+pnpm build
 ```
 
-Output goes to `build/`. Serve it with any static file server, or use `npm run start:real` to run `vite preview` against the built output with the `/api` proxy still wired up.
+Output goes to `build/`. Serve it with any static file server, or use `pnpm start:real` to run `vite preview` against the built output with the `/api` proxy still wired up.
 
 ---
 
